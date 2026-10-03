@@ -4,112 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simple Gantt</title>
-<style>
-  :root {
-    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
-    --line: #e4e4e0; --accent: #3b6fd8; --today: #d94a3b; --weekend: #f0f0ec;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa0;
-      --line: #2e2e33; --accent: #6b95ea; --today: #ef6a5b; --weekend: #252529;
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: var(--bg); color: var(--text); }
-  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
-  h1 { font-size: 20px; margin: 0 0 16px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-
-  form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
-  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-  input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
-          background: var(--bg); color: var(--text); }
-  input[name=name] { min-width: 220px; }
-  button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line);
-           background: var(--panel); color: var(--text); cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .error { color: var(--today); font-size: 12px; min-height: 16px; margin-top: 6px; }
-
-  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-  .toolbar .spacer { flex: 1; }
-
-  /* Chart */
-  .chart { display: grid; grid-template-columns: 220px 1fr; overflow: hidden; }
-  .labels { border-right: 1px solid var(--line); }
-  .labels .row, .labels .head { padding: 0 8px; display: flex; align-items: center; gap: 6px; }
-  .labels .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .labels .row button { padding: 0 6px; border: none; background: none; color: var(--muted); }
-  .labels .row button:hover { color: var(--text); }
-  .timeline { overflow-x: auto; }
-  .track { position: relative; }
-  .head { height: 58px; border-bottom: 1px solid var(--line); }
-  .row { height: 36px; border-bottom: 1px solid var(--line); }
-  .day { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
-  .day.weekend { background: var(--weekend); }
-  /* Header rows, top to bottom: quarter, month + year, day */
-  .quarter-label { position: absolute; top: 4px; padding-left: 4px; font-size: 11px; font-weight: 700;
-                   white-space: nowrap; border-left: 2px solid var(--text); }
-  .month-label { position: absolute; top: 22px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-  .day-label { position: absolute; top: 40px; font-size: 11px; color: var(--muted); text-align: center; }
-  .bar { position: absolute; height: 22px; border-radius: 4px; background: var(--bar, var(--accent)); color: var(--bar-text, #fff);
-         font-size: 12px; font-weight: 600; padding: 0 10px; display: flex; align-items: center; white-space: nowrap;
-         cursor: grab; z-index: 1; user-select: none; touch-action: none; }
-  .bar:hover { filter: brightness(1.1); }
-  /* Milestones: a diamond on the bar's start or end, in the solid group colour.
-     It sits inside the bar so it follows drags; clicks pass through to the resize handle. */
-  .bar .diamond { position: absolute; top: 50%; width: 14px; height: 14px; background: var(--bar, var(--accent));
-                  border: 2px solid var(--panel); border-radius: 2px; pointer-events: none; z-index: 2;
-                  transform: translate(-50%, -50%) rotate(45deg); }
-  .bar.ms-start .diamond { left: 0; }
-  .bar.ms-end .diamond { left: 100%; }
-  .bar.ms-start { padding-left: 16px; }
-  .bar.ms-end { padding-right: 16px; }
-  .ms-icon { flex: none; width: 9px; height: 9px; margin: 0 2px 0 1px; transform: rotate(45deg);
-             background: currentColor; border-radius: 1px; }
-  .labels .row.grouped .ms-icon { background: var(--bar); }
-  .bar.dragging { cursor: grabbing; z-index: 3; opacity: .9; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
-  .bar .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
-  /* Resize handles: drag a bar's left/right end to change its start/end date.
-     A grip line shows on hover so the ends are easy to find. */
-  .bar .handle { position: absolute; top: 0; bottom: 0; width: 10px; max-width: 30%; cursor: ew-resize; }
-  .bar .handle::after { content: ''; position: absolute; top: 5px; bottom: 5px; left: 50%; width: 2px;
-                        transform: translateX(-50%); border-radius: 1px; background: currentColor;
-                        opacity: 0; transition: opacity .15s; }
-  .bar:hover .handle::after, .bar.dragging .handle::after { opacity: .45; }
-  .bar .handle:hover::after { opacity: .9; }
-  .bar .handle[data-edge=start] { left: 0; }
-  .bar .handle[data-edge=end] { right: 0; }
-  .labels .row.grouped { padding-left: 22px; }
-  /* Left list rows use the exact same colour as their group's bars */
-  .labels .row { background: var(--bar); color: var(--bar-text);
-                 border-bottom-color: color-mix(in srgb, var(--bar-text) 25%, transparent); }
-  .labels .row button, .labels .row button:hover { color: inherit; }
-  .labels .row button { opacity: .7; }
-  .labels .row button:hover { opacity: 1; }
-  .labels .row.group-row { font-weight: 700; }
-  /* Tasks under a group (list rows and chart bars): a lighter tint of the group colour */
-  .row.grouped { --task-bg: color-mix(in srgb, var(--bar) 40%, #fff); }
-  .labels .row.grouped { background: var(--task-bg); color: #1d1d1f;
-                         border-bottom-color: color-mix(in srgb, var(--bar) 55%, #fff); }
-  .row.grouped .bar { background: var(--task-bg); color: #1d1d1f; }
-  .group-bar { position: absolute; top: 14px; height: 8px; border-radius: 2px; background: var(--bar); opacity: .7; z-index: 1; }
-  .today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--today); z-index: 2; }
-  .empty { color: var(--muted); padding: 24px; text-align: center; }
-
-  /* "Move following tasks?" dialog */
-  #shiftDialog { border: 1px solid var(--line); border-radius: 10px; padding: 20px; max-width: 460px; width: calc(100% - 32px);
-                 background: var(--panel); color: var(--text); box-shadow: 0 10px 40px rgba(0,0,0,.25); }
-  #shiftDialog::backdrop { background: rgba(0,0,0,.35); }
-  #shiftDialog form { display: block; }
-  #shiftDialog h2 { font-size: 16px; margin: 0 0 8px; }
-  #shiftDialog p { margin: 0 0 10px; }
-  #shiftDialog .list { max-height: 220px; overflow-y: auto; margin-bottom: 16px; }
-  #shiftDialog .list h3 { font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
-  #shiftDialog .list ul { margin: 0; padding-left: 18px; }
-  #shiftDialog .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <main>
@@ -137,9 +32,17 @@
 
   <section class="panel">
     <div class="toolbar">
+      <!-- Day / Week / Month set the day width to a preset; the slider fine-tunes it -->
+      <div class="seg" id="viewBtns" role="group" aria-label="View">
+        <button data-view="day">Day</button>
+        <button data-view="week">Week</button>
+        <button data-view="month">Month</button>
+      </div>
       <label style="flex-direction:row;align-items:center">Day width
-        <input id="zoom" type="range" min="8" max="60" value="28">
+        <input id="zoom" type="range" min="2" max="60" value="28">
       </label>
+      <button id="todayBtn" title="Scroll to today">Today</button>
+      <button id="collapseAllBtn" hidden>Collapse all</button>
       <span class="spacer"></span>
       <button id="exportBtn">Export JSON</button>
       <button id="importBtn">Import JSON</button>
@@ -155,412 +58,38 @@
     <h2 id="shiftTitle"></h2>
     <p id="shiftText"></p>
     <div class="list" id="shiftList"></div>
-    <div class="actions">
-      <button value="none">Don't move</button>
-      <button value="all" id="shiftAllBtn"></button>
-      <button value="group" id="shiftGroupBtn" class="primary"></button>
+    <!-- "Apply" comes first so Enter picks it; the row is shown reversed -->
+    <div class="actions reverse">
+      <button value="apply" class="primary">Apply</button>
+      <button value="cancel">Cancel</button>
     </div>
   </form>
 </dialog>
 
-<script>
-const STORAGE_KEY = 'simple-gantt-tasks';
-const DAY = 86400000;
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+<dialog id="confirmDialog">
+  <form method="dialog">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmText"></p>
+    <div class="actions reverse">
+      <button value="ok" class="primary" id="confirmOk">OK</button>
+      <button value="cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
 
-const COLORS_KEY = 'simple-gantt-group-colors';
-let tasks = load();
-let groupColors = loadGroupColors();
-let editingId = null;
+<dialog id="nameDialog">
+  <form method="dialog">
+    <h2>New task</h2>
+    <p id="nameText"></p>
+    <label class="field">Task name <input id="nameInput" autocomplete="off"></label>
+    <!-- "Add task" comes first so Enter picks it; the row is shown reversed -->
+    <div class="actions reverse">
+      <button value="ok" class="primary">Add task</button>
+      <button value="cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
 
-const form = document.getElementById('taskForm');
-const errorEl = document.getElementById('error');
-const chartEl = document.getElementById('chart');
-const zoomEl = document.getElementById('zoom');
-
-// ---- Storage ----
-function load() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw === null ? null : JSON.parse(raw) || [];
-  } catch { return null; }
-}
-function save() {
-  syncGroupColors();
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    localStorage.setItem(COLORS_KEY, JSON.stringify(groupColors));
-  } catch {}
-}
-
-// ---- Group colours: { groupName: paletteIndex }, kept so colours stay stable ----
-function loadGroupColors() {
-  try { return JSON.parse(localStorage.getItem(COLORS_KEY)); } catch { return null; }
-}
-
-// Gives every new group a random palette colour (preferring colours no other
-// group is using) and forgets colours of groups that no longer exist.
-function syncGroupColors() {
-  const names = new Set(tasks.map(t => t.group).filter(Boolean));
-  if (!groupColors) {
-    // First run with saved tasks from before colours were stored:
-    // keep the colours they already had (assigned in creation order).
-    groupColors = {};
-    [...names].forEach((g, i) => { groupColors[g] = i % PALETTE.length; });
-  }
-  for (const g of Object.keys(groupColors)) {
-    if (!names.has(g) || !PALETTE[groupColors[g]]) delete groupColors[g];
-  }
-  for (const g of names) {
-    if (g in groupColors) continue;
-    const used = new Set(Object.values(groupColors));
-    const free = PALETTE.map((_, i) => i).filter(i => !used.has(i));
-    const pool = free.length ? free : PALETTE.map((_, i) => i);
-    groupColors[g] = pool[Math.floor(Math.random() * pool.length)];
-  }
-}
-
-// ---- Date helpers (all dates handled as UTC midnight to avoid DST drift) ----
-const parse = s => new Date(s + 'T00:00:00Z');
-const fmt = d => d.toISOString().slice(0, 10);
-const daysBetween = (a, b) => Math.round((b - a) / DAY);
-
-// ---- Form ----
-form.addEventListener('submit', async e => {
-  e.preventDefault();
-  const data = Object.fromEntries(new FormData(form));
-  if (parse(data.end) < parse(data.start)) {
-    errorEl.textContent = 'End date must be on or after the start date.';
-    return;
-  }
-  errorEl.textContent = '';
-  data.group = data.group.trim();
-  let changed = null;
-  if (editingId) {
-    const task = tasks.find(t => t.id === editingId);
-    changed = { before: { ...task }, task };
-    Object.assign(task, data);
-  } else {
-    tasks.push({ id: uid(), ...data });
-  }
-  resetForm();
-  save(); render();
-  if (changed) await offerToShiftFollowing(changed.before, changed.task);
-});
-
-document.getElementById('cancelEdit').onclick = resetForm;
-
-// When a task's end date moves, offer to move the tasks that come after it
-// (start after the task's original start date) by the same number of days:
-// either just those in the same group, or those in every group.
-async function offerToShiftFollowing(before, task) {
-  const delta = daysBetween(parse(before.end), parse(task.end));
-  if (!delta) return;
-  const later = tasks
-    .filter(t => t.id !== task.id && t.start > before.start)
-    .sort((a, b) => a.start.localeCompare(b.start));
-  if (!later.length) return;
-  const sameGroup = later.filter(t => (t.group || '') === task.group);
-
-  const choice = await askShift(task, delta, later, sameGroup);
-  const toMove = choice === 'group' ? sameGroup : choice === 'all' ? later : [];
-  if (!toMove.length) return;
-
-  const shift = s => fmt(new Date(+parse(s) + delta * DAY));
-  toMove.forEach(t => { t.start = shift(t.start); t.end = shift(t.end); });
-  if (editingId) { // keep the form in sync if the task being edited moved
-    const t = tasks.find(t => t.id === editingId);
-    form.start.value = t.start; form.end.value = t.end;
-  }
-  save(); render();
-}
-
-// Shows the in-page dialog and resolves with 'group', 'all' or 'none'.
-function askShift(task, delta, later, sameGroup) {
-  const dlg = document.getElementById('shiftDialog');
-  const n = Math.abs(delta), days = `${n} day${n > 1 ? 's' : ''}`, dir = delta > 0 ? 'later' : 'earlier';
-  const groupName = g => g ? esc(g) : 'Ungrouped';
-
-  document.getElementById('shiftTitle').textContent = 'Move the tasks that come after?';
-  document.getElementById('shiftText').innerHTML =
-    `<b>${esc(task.name)}</b> now ends ${days} ${dir}. Move the tasks that come after it ${days} ${dir} too?`;
-
-  // List the affected tasks, by group, with this task's group first
-  const byGroup = new Map([[task.group, []]]);
-  for (const t of later) {
-    const g = t.group || '';
-    if (!byGroup.has(g)) byGroup.set(g, []);
-    byGroup.get(g).push(t);
-  }
-  document.getElementById('shiftList').innerHTML = [...byGroup]
-    .filter(([, list]) => list.length)
-    .map(([g, list]) => `<h3>${groupName(g)}${g === task.group ? ' (this group)' : ''}</h3>
-      <ul>${list.map(t => `<li>${esc(t.name)}</li>`).join('')}</ul>`).join('');
-
-  const groupBtn = document.getElementById('shiftGroupBtn');
-  const allBtn = document.getElementById('shiftAllBtn');
-  groupBtn.hidden = !sameGroup.length;
-  groupBtn.textContent = `Move this group (${sameGroup.length})`;
-  allBtn.hidden = later.length === sameGroup.length; // nothing in other groups
-  allBtn.textContent = `Move all groups (${later.length})`;
-  allBtn.className = groupBtn.hidden ? 'primary' : '';
-
-  return new Promise(resolve => {
-    dlg.returnValue = '';
-    dlg.addEventListener('close', () => resolve(dlg.returnValue || 'none'), { once: true });
-    dlg.showModal();
-    (groupBtn.hidden ? allBtn : groupBtn).focus();
-  });
-}
-
-function resetForm() {
-  editingId = null;
-  form.reset();
-  document.getElementById('submitBtn').textContent = 'Add task';
-  document.getElementById('cancelEdit').hidden = true;
-}
-
-function startEdit(id) {
-  const t = tasks.find(t => t.id === id);
-  editingId = id;
-  form.name.value = t.name; form.group.value = t.group || '';
-  form.start.value = t.start; form.end.value = t.end;
-  form.milestone.value = t.milestone || '';
-  document.getElementById('submitBtn').textContent = 'Save';
-  document.getElementById('cancelEdit').hidden = false;
-  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  form.start.focus();
-}
-
-function removeTask(id) {
-  tasks = tasks.filter(t => t.id !== id);
-  if (editingId === id) resetForm();
-  save(); render();
-}
-
-// ---- Toolbar ----
-zoomEl.oninput = render;
-document.getElementById('clearBtn').onclick = () => {
-  if (tasks.length && confirm('Delete all tasks?')) { tasks = []; save(); render(); }
-};
-document.getElementById('exportBtn').onclick = () => {
-  syncGroupColors();
-  const blob = new Blob([JSON.stringify({ tasks, groupColors }, null, 2)], { type: 'application/json' });
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'gantt.json' });
-  a.click(); URL.revokeObjectURL(a.href);
-};
-document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
-document.getElementById('importFile').onchange = async e => {
-  const file = e.target.files[0]; if (!file) return;
-  try {
-    let data = JSON.parse(await file.text());
-    // Accepts { tasks, groupColors } or an older plain array of tasks
-    groupColors = (!Array.isArray(data) && data.groupColors) || {};
-    if (!Array.isArray(data)) data = data.tasks;
-    if (!Array.isArray(data)) throw 0;
-    tasks = data.map(t => ({ id: t.id || uid(), name: t.name, group: t.group || '', start: t.start, end: t.end, milestone: t.milestone || '' }));
-    save(); render();
-  } catch { alert('Could not read that file.'); }
-  e.target.value = '';
-};
-
-// ---- Group colours (bar fill + readable text colour) ----
-const PALETTE = [
-  { bg: '#7B1FD1', fg: '#fff' },    // purple
-  { bg: '#F2214F', fg: '#fff' },    // coral red
-  { bg: '#00A88C', fg: '#fff' },    // teal
-  { bg: '#FFA21F', fg: '#3a2200' }, // amber
-  { bg: '#2F5FE8', fg: '#fff' },    // royal blue
-  { bg: '#FF5A0F', fg: '#fff' },    // orange
-  { bg: '#0EA5FF', fg: '#fff' },    // sky blue
-  { bg: '#FFCC14', fg: '#3a2c00' }, // yellow
-];
-const UNGROUPED_COLOR = { bg: '#6E6E78', fg: '#fff' };
-
-// ---- Drag & drop on bars ----
-// Drag the bar body to move a task, drag either edge to change start/end.
-// Snaps to whole days. A press without movement opens the task for editing.
-let drag = null;
-let chartStart = null; // first day shown in the chart, set by render()
-
-function draggedDates({ task, mode, days }) {
-  const shift = s => fmt(new Date(+parse(s) + days * DAY));
-  let { start, end } = task;
-  if (mode !== 'end') start = shift(start);
-  if (mode !== 'start') end = shift(end);
-  if (start > end) mode === 'start' ? (start = end) : (end = start); // never invert a task
-  return { start, end };
-}
-
-chartEl.addEventListener('pointerdown', e => {
-  const bar = e.target.closest('.bar');
-  if (!bar || e.button !== 0) return;
-  e.preventDefault();
-  bar.setPointerCapture(e.pointerId);
-  drag = {
-    bar, task: tasks.find(t => t.id === bar.dataset.id),
-    mode: e.target.dataset.edge || 'move',
-    x0: e.clientX, dayW: +zoomEl.value, days: 0, moved: false,
-  };
-});
-
-chartEl.addEventListener('pointermove', e => {
-  if (!drag) return;
-  const dx = e.clientX - drag.x0;
-  if (!drag.moved && Math.abs(dx) < 4) return;
-  if (!drag.moved) { drag.moved = true; drag.bar.classList.add('dragging'); }
-  drag.days = Math.round(dx / drag.dayW);
-  const { start, end } = draggedDates(drag);
-  const len = daysBetween(parse(start), parse(end)) + 1;
-  drag.bar.style.left = daysBetween(chartStart, parse(start)) * drag.dayW + 'px';
-  drag.bar.style.width = len * drag.dayW + 'px';
-  drag.bar.querySelector('.label').textContent = `${shortDate(start)} → ${shortDate(end)}`;
-});
-
-chartEl.addEventListener('pointerup', () => {
-  if (!drag) return;
-  const d = drag; drag = null;
-  if (!d.moved) return startEdit(d.task.id);
-  const { start, end } = draggedDates(d);
-  if (start === d.task.start && end === d.task.end) return render();
-  const before = { ...d.task };
-  Object.assign(d.task, { start, end });
-  if (editingId === d.task.id) { form.start.value = d.task.start; form.end.value = d.task.end; }
-  save(); render();
-  offerToShiftFollowing(before, d.task);
-});
-
-chartEl.addEventListener('pointercancel', () => { drag = null; render(); });
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && drag) { drag = null; render(); } // cancel a drag
-});
-
-const shortDate = s => parse(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
-
-// ---- Render ----
-function render() {
-  if (!tasks.length) {
-    chartEl.innerHTML = '<div class="empty">Add a task above to see your timeline.</div>';
-    return;
-  }
-  const dayW = +zoomEl.value;
-  const sorted = [...tasks].sort((a, b) => a.start.localeCompare(b.start));
-
-  // Range: 2 days padding either side
-  let min = Math.min(...sorted.map(t => parse(t.start)));
-  let max = Math.max(...sorted.map(t => parse(t.end)));
-  min = new Date(min - 2 * DAY); max = new Date(max + 2 * DAY);
-  chartStart = min;
-  const totalDays = daysBetween(min, max) + 1;
-  const width = totalDays * dayW;
-
-  // Header + grid columns
-  let grid = '', head = '';
-  for (let i = 0; i < totalDays; i++) {
-    const d = new Date(+min + i * DAY);
-    const dow = d.getUTCDay();
-    grid += `<div class="day${dow === 0 || dow === 6 ? ' weekend' : ''}" style="left:${i * dayW}px;width:${dayW}px"></div>`;
-    if (dayW >= 18) head += `<div class="day-label" style="left:${i * dayW}px;width:${dayW}px">${d.getUTCDate()}</div>`;
-    // Labels also go on the chart's first day, unless the next month/quarter
-    // starts so soon that the two labels would overlap
-    const fits = (nextStart, labelPx) => i > 0 || daysBetween(d, nextStart) * dayW >= labelPx;
-    const nextMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
-    const nextQuarter = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - d.getUTCMonth() % 3 + 3, 1));
-    if ((i === 0 || d.getUTCDate() === 1) && fits(nextMonth, 70)) {
-      head += `<div class="month-label" style="left:${i * dayW + 4}px">${d.toLocaleString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' })}</div>`;
-    }
-    // Quarter label wherever a quarter begins (Jan, Apr, Jul, Oct)
-    if ((i === 0 || (d.getUTCDate() === 1 && d.getUTCMonth() % 3 === 0)) && fits(nextQuarter, 30)) {
-      head += `<div class="quarter-label" style="left:${i * dayW}px">Q${Math.floor(d.getUTCMonth() / 3) + 1}</div>`;
-    }
-  }
-
-  // Today marker
-  const todayOffset = daysBetween(min, parse(fmt(new Date())));
-  const today = todayOffset >= 0 && todayOffset < totalDays
-    ? `<div class="today" style="left:${todayOffset * dayW + dayW / 2}px" title="Today"></div>` : '';
-
-  // Group tasks: named groups ordered by their earliest start, ungrouped tasks last
-  const groups = new Map();
-  for (const t of sorted) {
-    const g = t.group || '';
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(t);
-  }
-  const groupNames = [...groups.keys()].filter(Boolean);
-  const order = [...groupNames, ...(groups.has('') ? [''] : [])];
-  const showHeaders = groupNames.length > 0;
-
-  document.getElementById('groupList').innerHTML =
-    groupNames.map(g => `<option value="${esc(g)}">`).join('');
-
-  syncGroupColors();
-  const groupColor = new Map(Object.entries(groupColors).map(([g, i]) => [g, PALETTE[i]]));
-
-  let labels = '', rows = '';
-  for (const g of order) {
-    const list = groups.get(g);
-    const c = g ? groupColor.get(g) : UNGROUPED_COLOR;
-    const colorVars = `--bar:${c.bg};--bar-text:${c.fg}`;
-    if (showHeaders) {
-      const gStart = list[0].start; // list is sorted by start
-      const gEnd = list.reduce((m, t) => t.end > m ? t.end : m, list[0].end);
-      const gLeft = daysBetween(min, parse(gStart)) * dayW;
-      const gLen = daysBetween(parse(gStart), parse(gEnd)) + 1;
-      labels += `<div class="row group-row" style="${colorVars}"><span>${g ? esc(g) : 'Ungrouped'}</span></div>`;
-      rows += `<div class="row" style="position:relative;${colorVars}">
-        <div class="group-bar" style="left:${gLeft}px;width:${gLen * dayW}px" title="${gStart} → ${gEnd}"></div>
-      </div>`;
-    }
-    for (const t of list) {
-      const left = daysBetween(min, parse(t.start)) * dayW;
-      const len = daysBetween(parse(t.start), parse(t.end)) + 1; // inclusive
-      labels += `
-        <div class="row${showHeaders ? ' grouped' : ''}" style="${colorVars}">
-          ${t.milestone ? `<i class="ms-icon" title="Milestone at ${t.milestone}"></i>` : ''}
-          <span title="${esc(t.name)}">${esc(t.name)}</span>
-          <button onclick="startEdit('${t.id}')" title="Edit">✎</button>
-          <button onclick="removeTask('${t.id}')" title="Delete">✕</button>
-        </div>`;
-      rows += `<div class="row${showHeaders ? ' grouped' : ''}" style="position:relative;${colorVars}">
-        <div class="bar${t.milestone ? ' ms-' + t.milestone : ''}" data-id="${t.id}" style="left:${left}px;width:${len * dayW}px;top:7px"
-             title="${esc(t.name)}: ${t.start} → ${t.end} (${len} day${len > 1 ? 's' : ''})${t.milestone ? `\nMilestone at ${t.milestone}` : ''}\nDrag to move, drag edges to resize, click to edit"
-          ><span class="handle" data-edge="start"></span><span class="label">${esc(t.name)}</span><span class="handle" data-edge="end"></span>${t.milestone ? '<i class="diamond"></i>' : ''}</div>
-      </div>`;
-    }
-  }
-
-  chartEl.innerHTML = `
-    <div class="chart">
-      <div class="labels"><div class="head"></div>${labels}</div>
-      <div class="timeline">
-        <div class="track" style="width:${width}px">
-          ${grid}${today}
-          <div class="head" style="position:relative">${head}</div>
-          ${rows}
-        </div>
-      </div>
-    </div>`;
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// Seed with an example on first run so the chart isn't empty
-if (tasks === null) {
-  const t0 = new Date(); t0.setUTCHours(0, 0, 0, 0);
-  const at = n => fmt(new Date(+t0 + n * DAY));
-  tasks = [
-    { id: uid(), name: 'Research', group: 'Planning', start: at(-3), end: at(2) },
-    { id: uid(), name: 'Design', group: 'Planning', start: at(2), end: at(6) },
-    { id: uid(), name: 'Review', group: 'Planning', start: at(9), end: at(10), milestone: 'end' },
-    { id: uid(), name: 'Build', group: 'Delivery', start: at(8), end: at(20) },
-    { id: uid(), name: 'Launch', group: 'Delivery', start: at(21), end: at(21), milestone: 'start' },
-  ];
-  save();
-}
-render();
-</script>
+<script src="app.js"></script>
 </body>
 </html>

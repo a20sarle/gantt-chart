@@ -1,0 +1,241 @@
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
+    --line: #e4e4e0; --accent: #3b6fd8; --today: #d94a3b; --weekend: #f0f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa0;
+      --line: #2e2e33; --accent: #6b95ea; --today: #ef6a5b; --weekend: #252529;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--text); }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+
+  form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+          background: var(--bg); color: var(--text); }
+  input[name=name] { min-width: 220px; }
+  button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .error { color: var(--today); font-size: 12px; min-height: 16px; margin-top: 6px; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .toolbar .spacer { flex: 1; }
+
+  /* Chart */
+  .chart { display: grid; grid-template-columns: 220px 1fr; overflow: hidden; }
+  .labels { border-right: 1px solid var(--line); }
+  .labels .row, .labels .head { padding: 0 8px; display: flex; align-items: center; gap: 6px; }
+  .labels .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .labels .row button { padding: 0 6px; border: none; background: none; color: var(--muted); }
+  .labels .row button:hover { color: var(--text); }
+  .timeline { overflow-x: auto; }
+  .track { position: relative; }
+  .head { height: 76px; border-bottom: 1px solid var(--line); }
+  .row { height: 36px; border-bottom: 1px solid var(--line); }
+  .day { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+  .day.weekend { background: var(--weekend); }
+  /* Header rows, top to bottom: quarter, month + year, day */
+  /* Header rows, top to bottom: quarter, month + year, week, day. Each quarter/
+     month/week label is a block as wide as its period; the text inside sticks to
+     the left edge while scrolling (overflow: clip keeps it inside its block). */
+  .hspan { position: absolute; height: 16px; line-height: 16px; font-size: 11px; white-space: nowrap; overflow: clip; }
+  .hspan > span { position: sticky; left: 0; display: inline-block; padding: 0 4px; }
+  .hspan.quarter { top: 3px; font-weight: 700; border-left: 2px solid var(--text); }
+  .hspan.month { top: 20px; font-weight: 600; border-left: 1px solid var(--line); }
+  .hspan.week { top: 37px; color: var(--muted); border-left: 1px solid var(--line); }
+  .day-label { position: absolute; top: 56px; font-size: 11px; color: var(--muted); text-align: center; }
+  .bar { position: absolute; height: 22px; border-radius: 4px; background: var(--bar, var(--accent)); color: var(--bar-text, #fff);
+         font-size: 12px; font-weight: 600; padding: 0 10px; display: flex; align-items: center; white-space: nowrap;
+         cursor: grab; z-index: 1; user-select: none; touch-action: none; }
+  .bar:hover { filter: brightness(1.1); }
+  /* Milestones: a diamond on the bar's start or end, in the solid group colour.
+     It sits inside the bar so it follows drags; clicks pass through to the resize handle. */
+  .bar .diamond { position: absolute; top: 50%; width: 14px; height: 14px; background: var(--bar, var(--accent));
+                  border: 2px solid var(--panel); border-radius: 2px; pointer-events: none; z-index: 2;
+                  transform: translate(-50%, -50%) rotate(45deg); }
+  .bar.ms-start .diamond { left: 0; }
+  .bar.ms-end .diamond { left: 100%; }
+  .bar.ms-start { padding-left: 16px; }
+  .bar.ms-end { padding-right: 16px; }
+  .ms-icon { flex: none; width: 9px; height: 9px; margin: 0 2px 0 1px; transform: rotate(45deg);
+             background: currentColor; border-radius: 1px; }
+  .labels .row.grouped .ms-icon { background: var(--bar); }
+  .bar.dragging { cursor: grabbing; z-index: 3; opacity: .9; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+  .bar .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  /* Resize handles: drag a bar's left/right end to change its start/end date.
+     A grip line shows on hover so the ends are easy to find. */
+  .bar .handle { position: absolute; top: 0; bottom: 0; width: 10px; max-width: 30%; cursor: ew-resize; }
+  .bar .handle::after { content: ''; position: absolute; top: 5px; bottom: 5px; left: 50%; width: 2px;
+                        transform: translateX(-50%); border-radius: 1px; background: currentColor;
+                        opacity: 0; transition: opacity .15s; }
+  .bar:hover .handle::after, .bar.dragging .handle::after { opacity: .45; }
+  .bar .handle:hover::after { opacity: .9; }
+  .bar .handle[data-edge=start] { left: 0; }
+  .bar .handle[data-edge=end] { right: 0; }
+  .labels .row.grouped { padding-left: 22px; }
+  /* Left list rows use the exact same colour as their group's bars */
+  .labels .row { background: var(--bar); color: var(--bar-text);
+                 border-bottom-color: color-mix(in srgb, var(--bar-text) 25%, transparent); }
+  .labels .row button, .labels .row button:hover { color: inherit; }
+  .labels .row button { opacity: .7; }
+  .labels .row button:hover { opacity: 1; }
+  .labels .row.group-row { font-weight: 700; }
+  /* Tasks under a group (list rows and chart bars): a lighter tint of the group colour */
+  .row.grouped { --task-bg: color-mix(in srgb, var(--bar) 40%, #fff); }
+  .labels .row.grouped { background: var(--task-bg); color: #1d1d1f;
+                         border-bottom-color: color-mix(in srgb, var(--bar) 55%, #fff); }
+  .row.grouped .bar { background: var(--task-bg); color: #1d1d1f; }
+  .group-bar { position: absolute; top: 14px; height: 8px; border-radius: 2px; background: var(--bar); opacity: .7; z-index: 1;
+               cursor: grab; touch-action: none; }
+  .group-bar::before { content: ''; position: absolute; left: 0; right: 0; top: -9px; bottom: -9px; } /* bigger grab area */
+  .group-bar:hover { opacity: .9; }
+  .group-bar.dragging { opacity: 1; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+  /* Collapse / expand toggle and task count on group header rows */
+  .labels .row .toggle { padding: 0; width: 16px; font-size: 12px; opacity: 1; }
+  .labels .row.group-row .count { font-weight: 500; font-size: 12px; opacity: .8; }
+
+  /* Milestone diamonds shown on a collapsed group's row */
+  .group-ms { position: absolute; top: 50%; width: 12px; height: 12px; background: var(--bar); z-index: 2;
+              border: 2px solid var(--panel); border-radius: 2px; pointer-events: none;
+              transform: translate(-50%, -50%) rotate(45deg); }
+
+  /* Cursor stays the same everywhere while dragging */
+  body.drag-move, body.drag-move * { cursor: grabbing !important; }
+  body.drag-resize, body.drag-resize * { cursor: ew-resize !important; }
+  .today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--today); z-index: 2; }
+
+  /* Dialogs ("Move following tasks?", "New task") */
+  dialog { border: 1px solid var(--line); border-radius: 10px; padding: 20px; max-width: 460px; width: calc(100% - 32px);
+                 background: var(--panel); color: var(--text); box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog form { display: block; }
+  dialog h2 { font-size: 16px; margin: 0 0 8px; }
+  dialog p { margin: 0 0 10px; }
+  dialog .list { max-height: min(60vh, 480px); overflow-y: auto; margin-bottom: 16px; }
+  dialog .list h3 { font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
+  dialog .list ul { margin: 0; padding-left: 18px; }
+  dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+  dialog .field { margin-bottom: 16px; }
+  dialog .field input { width: 100%; }
+  dialog .actions.reverse { flex-direction: row-reverse; justify-content: flex-start; }
+
+  /* Task rows in the list can be dragged onto another group */
+  .labels .row.task-row { cursor: grab; }
+  .labels .row.dragging { position: relative; z-index: 5; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  /* Header of the group a task is being dragged to */
+  .ghead.drop-target { box-shadow: inset 0 0 0 3px var(--text); }
+
+  /* Empty space in the chart: drag to create a task */
+  .timeline .row { cursor: crosshair; }
+  .ghost-bar { position: absolute; height: 22px; border-radius: 4px; border: 2px dashed var(--accent);
+               background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--text);
+               font-size: 12px; font-weight: 600; padding: 0 8px; display: flex; align-items: center;
+               white-space: nowrap; z-index: 3; pointer-events: none; }
+  .labels .row.add-row { border-bottom-color: var(--line); }
+  .labels .row.add-row span { color: var(--muted); font-size: 12px; font-style: italic; }
+  body.drag-create, body.drag-create * { cursor: crosshair !important; }
+
+  /* Progress: a darker fill inside the bar, from the left */
+  .bar .progress { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; pointer-events: none;
+                   background: color-mix(in srgb, var(--bar) 75%, #fff); }
+  .bar .label { position: relative; } /* above the fill */
+  /* Completed tasks are greyed out, in the chart and in the list */
+  .bar.done, .labels .row.done { filter: grayscale(1); opacity: .55; }
+
+  /* Subtasks */
+  .labels .row input[type=checkbox] { margin: 0; flex: none; cursor: pointer; accent-color: var(--bar); }
+  .labels .row .sub-count { font-size: 11px; font-weight: 600; opacity: .75; }
+  /* Three levels in the list: group (solid colour, bold) > task (lighter shade,
+     semi-bold) > subtask (lightest shade, regular, joined to its task by a line) */
+  .labels .row.task-row > span { font-weight: 600; }
+  .labels .row.sub-row { position: relative; padding-left: 42px; font-size: 12.5px; font-weight: 400;
+                         background: color-mix(in srgb, var(--bar) 14%, #fff); color: #1d1d1f;
+                         border-bottom-color: color-mix(in srgb, var(--bar) 25%, #fff); }
+  .labels .row.sub-row::before { content: ''; position: absolute; left: 29px; top: 0; bottom: 0;
+                                 border-left: 2px solid color-mix(in srgb, var(--bar) 55%, #fff); }
+  .labels .row.sub-row input[type=checkbox] { width: 12px; height: 12px; }
+  .labels .row.sub-row .sub-checked { text-decoration: line-through; opacity: .6; }
+  .labels .row .sub-add-btn { font-size: 16px; font-weight: 600; line-height: 1; }
+  /* The new subtask being typed: plain text on the row, no box */
+  .labels .row .sub-new { flex: 1; min-width: 0; padding: 0; border: none; background: transparent;
+                          color: inherit; font: inherit; outline: none; }
+  .labels .row .sub-new::placeholder { color: inherit; opacity: .5; }
+
+  /* An expanded task's bar grows as tall as its subtask rows in the list */
+  .bar.tall { align-items: flex-start; }
+  .bar.tall .label { line-height: 22px; }
+  .bar.tall .diamond { top: 11px; }
+
+  /* Task status circle: click to mark a task done; for tasks with subtasks it's
+     a ring that fills with the progress. Round = task, square tick box = subtask. */
+  .labels .row .status { --ring: var(--bar); flex: none; width: 16px; height: 16px; padding: 0; opacity: 1;
+                         border: 2px solid var(--ring); border-radius: 50%; background: #fff; color: #fff;
+                         font-size: 10px; font-weight: 800; line-height: 12px; text-align: center; }
+  .labels .row:not(.grouped) .status { --ring: var(--bar-text); } /* rows without groups are solid grey */
+  .labels .row button.status { cursor: pointer; }
+  .labels .row button.status:hover { background: color-mix(in srgb, var(--ring) 30%, #fff); color: #fff; }
+  /* Task with subtasks: a thick two-tone ring (pale track that fills with the
+     group colour), clearly different from the thin done-circle even at 0% */
+  .labels .row .status.ring, .labels .row button.status.ring:hover {
+    position: relative; border: none;
+    background: conic-gradient(var(--ring) calc(var(--pct) * 1%), color-mix(in srgb, var(--ring) 55%, #fff) 0); }
+  .labels .row .status.ring::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: #fff; }
+  .labels .row button.status.ring:hover::after { background: color-mix(in srgb, var(--ring) 15%, #fff); }
+  .labels .row .status.checked, .labels .row button.status.checked:hover { background: var(--ring); }
+
+  /* Links between tasks: arrows from the end of one task to the start of the next */
+  svg.links { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; overflow: visible; }
+  svg.links .hit { fill: none; stroke: transparent; stroke-width: 10; pointer-events: stroke; cursor: pointer; }
+  svg.links .line { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+  svg.links .head { fill: var(--muted); }
+  svg.links .link:hover .line { stroke: var(--text); stroke-width: 2.5; }
+  svg.links .link:hover .head { fill: var(--text); }
+  svg.links .conflict .line { stroke: var(--today); }
+  svg.links .conflict .head { fill: var(--today); }
+  svg.links .link-draft { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
+
+  /* The dot at a bar's end: drag it onto another bar to link them */
+  .bar .link-dot { position: absolute; left: calc(100% + 6px); top: 4px; width: 12px; height: 12px;
+                   border-radius: 50%; background: var(--panel); border: 2px solid var(--muted);
+                   cursor: crosshair; opacity: 0; transition: opacity .15s; z-index: 4; }
+  .bar.ms-end .link-dot { left: calc(100% + 14px); } /* make room for the milestone diamond */
+  .bar:hover .link-dot, .bar.linking .link-dot { opacity: 1; }
+  .bar .link-dot:hover, .bar.linking .link-dot { border-color: var(--accent); background: var(--accent); }
+  .bar.link-target { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Choices in the "Move the tasks that come after?" dialog */
+  dialog section { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+  dialog .list section h3 { font-size: 13px; color: var(--text); margin: 0 0 4px; }
+  dialog section h4 { font-size: 12px; color: var(--muted); margin: 6px 0 2px; font-weight: 600; }
+  dialog section ul { margin: 0 0 8px; padding-left: 18px; font-size: 13px; }
+  dialog .choice { flex-direction: row; align-items: flex-start; gap: 8px; padding: 4px 0; color: var(--text);
+                   font-size: 13px; cursor: pointer; }
+  dialog .choice input { margin-top: 3px; }
+  dialog .choice span { display: flex; flex-direction: column; }
+  dialog .choice small { color: var(--muted); font-size: 12px; }
+
+  /* Day / Week / Month buttons: one joined group, the active view highlighted */
+  .seg { display: inline-flex; }
+  .seg button { border-radius: 0; margin-left: -1px; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; }
+  .seg button.active { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; }
+
+  /* Grid lines: stronger at week and month starts */
+  .day.week-start { border-left-color: color-mix(in srgb, var(--muted) 35%, var(--line)); }
+  .day.month-start { border-left-color: color-mix(in srgb, var(--muted) 70%, var(--line)); }
+  /* Zoomed out: each day is still its own column, but its line is faint */
+  .compact .day { border-left-color: color-mix(in srgb, var(--line) 40%, transparent); }
+  .compact .day.week-start { border-left-color: var(--line); }
+  .compact .day.month-start { border-left-color: color-mix(in srgb, var(--muted) 60%, var(--line)); }
+  /* ...and bars lose their padding so short tasks keep their true length */
+  .compact .bar, .compact .bar.ms-start, .compact .bar.ms-end { padding: 0 2px; }
