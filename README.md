@@ -163,6 +163,12 @@ The app needs no build step: double-click `index.html` and the browser loads the
 other two files from the same folder. Keep the three files together if you move
 or share the app.
 
+**When publishing an update** (e.g. to GitHub Pages): `index.html` loads the
+other two files as `styles.css?v=…` and `app.js?v=…`. Change that version
+whenever either file changes, so visitors' browsers fetch the new files instead
+of reusing old cached copies (an old `app.js` with a new `index.html` stops the
+app from working). Always upload all three files together.
+
 To run it from a local web server instead (as the Claude preview does):
 
 ```bash
