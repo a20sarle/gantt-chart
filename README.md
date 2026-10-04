@@ -109,7 +109,7 @@ the list.
 - The chart header shows the quarter (Q1–Q4), the month and year, the week number (ISO weeks, Monday to Sunday; "Week 41", or "W41" when space is short) and the day numbers.
 - While you scroll sideways, the current quarter, month and week stay pinned at the left edge until the next one takes over.
 - Weekends are shaded, and a red line marks today.
-- **Day / Week / Month** buttons zoom the chart to 28, 12 or 4 px per day; the **Day width** slider sets anything in between (the matching button lights up). Every day stays its own column; when zoomed out the daily lines get fainter and week and month starts get stronger lines. The app remembers your zoom.
+- **Day / Week / Month** buttons zoom the chart to 28, 12 or 4 px per day; pinching zooms to anything in between (the matching button lights up when you're on a preset). Every day stays its own column; when zoomed out the daily lines get fainter and week and month starts get stronger lines. The app remembers your zoom.
 - **Zoom by pinching** on a trackpad or phone (or **Ctrl + mouse wheel**) over the timeline. The day under the pointer, or between your fingers, stays in place.
 - **The page stays still; the chart scrolls.** The form and toolbar stay in place, and the chart fills the rest of the window. Inside it, up/down scrolling moves the list and the timeline together; sideways (two-finger swipe, or **Shift + wheel**) moves earlier/later in time. The dates stay pinned at the top and the task list stays pinned on the left.
 - **Overview** zooms so the whole project fits the visible width and scrolls to the top; the button stays highlighted, and clicking it again takes you back to where you were. (At the furthest zoom, 2 px per day, very long projects may still need a little sideways scrolling.)
@@ -117,20 +117,16 @@ the list.
 
 ### Project name
 The heading at the top is the project's name. Click it to rename it (**Enter**
-saves, **Esc** cancels). It appears at the top of printouts and images, in the
-browser tab, and in exported file names.
+saves, **Esc** cancels). It appears at the top of saved images, in the browser
+tab, and in exported file names.
 
-### Print, PDF and image
-- **Print / PDF** opens the browser's print window with the whole chart on
-  A4 landscape pages: just the project's dates, every row, the project name and
-  the date it was made, always in light colours. To get a PDF, choose
-  **Save as PDF** as the printer. Very long projects are shrunk to fit the page
-  width.
-- **Save image** downloads a PNG of the same view (named after the project and
-  the date). It needs an internet connection the first time, because it loads a
-  small helper library (html-to-image) from cdnjs.
-- Collapsed groups and open subtask lists are shown as they are on screen, so
-  collapse or open them first to choose what's included.
+### Save as image
+**Save image** downloads a PNG of the whole chart: just the project's dates,
+every row, with the project name and the date it was made above it, always in
+light colours. It's named after the project and the date. It needs an internet
+connection the first time, because it loads a small helper library
+(html-to-image) from cdnjs. Collapsed groups and open subtask lists are shown
+as they are on screen, so collapse or open them first to choose what's included.
 
 ### Saving, export and import
 - Everything is saved automatically in your browser (`localStorage`), so your chart is still there when you reopen the file in the same browser.

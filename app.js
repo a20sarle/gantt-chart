@@ -31,7 +31,6 @@ showProjectName();
 const form = document.getElementById('taskForm');
 const errorEl = document.getElementById('error');
 const chartEl = document.getElementById('chart');
-const zoomEl = document.getElementById('zoom');
 
 // ---- Storage ----
 function load() {
@@ -310,19 +309,19 @@ function removeTask(id) {
 }
 
 // ---- Toolbar ----
-// Zoom: Day / Week / Month set the day width (px per day) to a preset; the
-// slider can set anything in between. The last zoom is remembered.
+// Zoom (the width of one day, in px): Day / Week / Month set a preset, and
+// pinching zooms to anything in between. The last zoom is remembered.
 const VIEWS = { day: 28, week: 12, month: 4 };
 const ZOOM_KEY = 'simple-gantt-zoom';
-try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= 2 && z <= 60) zoomEl.value = z; } catch {}
+let zoom = VIEWS.day;
+try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= 2 && z <= 60) zoom = z; } catch {}
 function setZoom(px) {
   overviewReturn = null; // any other zoom leaves the overview
   px = Math.min(60, Math.max(2, px));
-  zoomEl.value = px;
+  zoom = px;
   try { localStorage.setItem(ZOOM_KEY, px); } catch {}
   render();
 }
-zoomEl.oninput = () => setZoom(+zoomEl.value);
 document.getElementById('viewBtns').onclick = e => {
   const btn = e.target.closest('[data-view]');
   if (btn) setZoom(VIEWS[btn.dataset.view]);
@@ -359,18 +358,16 @@ document.getElementById('overviewBtn').onclick = () => {
   render(); // refresh the button
 };
 
-// ---- Sharing: print / PDF and image ----
-// Both use a copy of the whole chart (just the project's dates, every row,
-// always in light colours) with the project name and date above it.
+// ---- Sharing: save the chart as an image ----
+// The image is made from a copy of the whole chart (just the project's dates,
+// every row, always in light colours) with the project name and date above it.
 let exportOpts = null; // { dayW, first, last } while rendering that copy
-const PRINT_W = 1040;  // usable width of an A4 landscape page at 96 dpi (10 mm margins)
 const IMAGE_W = 1600;  // width the image aims for
 const longDate = d => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const fileSlug = () => `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'gantt'}-${fmt(new Date())}`;
 
 // Fills #exportArea with the title and a copy of the chart fitted to about
-// `targetW` px wide. Returns the area (with the chart's width in px as
-// `area.chartWidth`), or null when there are no tasks.
+// `targetW` px wide. Returns the area, or null when there are no tasks.
 function buildExport(targetW) {
   if (!tasks.length) return null;
   const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
@@ -392,21 +389,8 @@ function buildExport(targetW) {
   area.innerHTML = `<header class="export-title"><h1>${esc(projectName)}</h1>
     <p>Made ${longDate(Date.now())} · ${longDate(first)} – ${longDate(last)}</p></header>`;
   area.appendChild(chart);
-  area.chartWidth = LABELS_W + days * dayW; // worked out, not measured: the area is hidden on screen
   return area;
 }
-
-document.getElementById('printBtn').onclick = () => {
-  const area = buildExport(PRINT_W);
-  if (!area) return;
-  // Shrink to fit the page if the chart is still wider (very long projects)
-  area.style.zoom = area.chartWidth > PRINT_W ? PRINT_W / area.chartWidth : '';
-  window.print();
-};
-window.addEventListener('afterprint', () => {
-  const area = document.getElementById('exportArea');
-  area.innerHTML = ''; area.style.zoom = '';
-});
 
 // The image library (html-to-image) is loaded from cdnjs the first time it's needed
 let imageLib = null;
@@ -437,7 +421,7 @@ document.getElementById('imageBtn').onclick = async () => {
     Object.assign(document.createElement('a'), { href: url, download: `${fileSlug()}.png` }).click();
   } catch {
     await askConfirm('Could not save the image',
-      'Saving an image needs an internet connection (it loads a small helper from cdnjs). Print / PDF works offline.', 'OK');
+      'Saving an image needs an internet connection (it loads a small helper from cdnjs).', 'OK');
   } finally {
     area.classList.remove('capturing'); area.innerHTML = '';
     btn.disabled = false; btn.textContent = 'Save image';
@@ -991,7 +975,7 @@ const shortDate = s => parse(s).toLocaleDateString(undefined, { month: 'short', 
 
 // ---- Render ----
 function render() {
-  const dayW = exportOpts ? exportOpts.dayW : +zoomEl.value;
+  const dayW = exportOpts ? exportOpts.dayW : zoom;
   // Tasks are always listed by start date (ties keep the order they were added)
   const sorted = [...tasks].sort((a, b) => a.start.localeCompare(b.start));
 
@@ -1009,7 +993,7 @@ function render() {
   let max = Math.max(+todayDate + (sorted.length ? 0 : 27 * DAY), ...sorted.map(t => +parse(t.end)));
   const pad = Math.max(2, Math.ceil((chartEl.clientWidth - LABELS_W) / dayW));
   min = new Date(min - (pad + viewExtra.left) * DAY); max = new Date(max + (pad + viewExtra.right) * DAY);
-  if (exportOpts) { // printing / image: just the project, with a day either side
+  if (exportOpts) { // the saved image: just the project, with a day either side
     min = new Date(exportOpts.first - DAY); max = new Date(exportOpts.last + DAY);
   }
   chartStart = min;

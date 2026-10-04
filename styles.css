@@ -261,7 +261,7 @@
   #projectName:hover { background: var(--weekend); }
   #projectName:focus { background: var(--panel); box-shadow: 0 0 0 2px var(--accent); }
 
-  /* ---- The copy of the chart used for printing and images ---- */
+  /* ---- The copy of the chart used for images ---- */
   #exportArea { display: none; }
   /* Always light, whatever the screen's theme */
   .export { --bg: #ffffff; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --line: #e4e4e0;
@@ -279,11 +279,3 @@
   /* Off-screen while the image is being made */
   #exportArea.capturing { display: block; position: fixed; left: -100000px; top: 0; }
 
-  @media print {
-    @page { size: A4 landscape; margin: 10mm; }
-    html, body { background: #fff; }
-    body > :not(#exportArea) { display: none !important; }
-    #exportArea { display: block; padding: 0; }
-    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } /* keep the colours */
-    .export .row { break-inside: avoid; }
-  }
