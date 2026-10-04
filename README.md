@@ -110,11 +110,18 @@ the list.
 - The chart header shows the quarter (Q1–Q4), the month and year, the week number (ISO weeks, Monday to Sunday; "Week 41", or "W41" when space is short) and the day numbers.
 - While you scroll sideways, the current quarter, month and week stay pinned at the left edge until the next one takes over.
 - Weekends are shaded, and a red line marks today.
-- **Day / Week / Month** buttons zoom the chart to 28, 12 or 4 px per day; pinching zooms to anything in between (the matching button lights up when you're on a preset). Every day stays its own column; when zoomed out the daily lines get fainter and week and month starts get stronger lines. The app remembers your zoom.
+- **Day / Week / Month / Quarter** work like in Google Calendar: each shows exactly one day, week (Monday to Sunday), month or quarter across the timeline. **‹** and **›** step one period back or forward, and **Today** jumps to the period containing today. Switching view keeps the date you're looking at. The selected view lights up and is remembered, so the app opens on it. Every day stays its own column; when zoomed out the daily lines get fainter and week and month starts get stronger lines. In Day view the header also shows the weekday.
+- **Pinching** zooms freely (the view button goes off); without a view selected, **‹ ›** move one screen and **Today** scrolls to today.
 - **Zoom by pinching** on a trackpad or phone (or **Ctrl + mouse wheel**) over the timeline. The day under the pointer, or between your fingers, stays in place.
 - **The page stays still; the chart scrolls.** The form and toolbar stay in place, and the chart fills the rest of the window. Inside it, up/down scrolling moves the list and the timeline together; sideways (two-finger swipe, or **Shift + wheel**) moves earlier/later in time. The dates stay pinned at the top and the task list stays pinned on the left.
 - **Overview** zooms so the whole project fits the visible width and scrolls to the top; the button stays highlighted, and clicking it again takes you back to where you were. (At the furthest zoom, 2 px per day, very long projects may still need a little sideways scrolling.)
-- The chart opens scrolled to **today**, and the **Today** button jumps back to it. The chart always includes today, and has a screen's width of extra days at each end, so there's always room to scroll and zoom.
+- The chart opens on the remembered view (Day / Week / Month / Quarter) around today, or scrolled to **today** when none is selected. The chart always includes today, and has a screen's width of extra days at each end, so there's always room to scroll and zoom.
+
+### Coming up
+When you open the app, a notice in the bottom-right corner lists the unfinished
+tasks that start **today** and **later this week** (Monday to Sunday). Click
+**OK** to hide it until the next day. If the app stays open past midnight, it
+checks again.
 
 ### Project name
 The heading at the top is the project's name. Click it to rename it (**Enter**
@@ -122,16 +129,39 @@ saves, **Esc** cancels). It appears at the top of saved images, in the browser
 tab, and in exported file names.
 
 ### Save as image
-**Save image** downloads a PNG of the whole chart: just the project's dates,
+**Export ▾ → Image (.png)** downloads a PNG of the whole chart: just the project's dates,
 every row, with the project name and the date it was made above it, always in
 light colours. It's named after the project and the date. It needs an internet
 connection the first time, because it loads a small helper library
 (html-to-image) from cdnjs. Collapsed groups and open subtask lists are shown
 as they are on screen, so collapse or open them first to choose what's included.
 
+### Export to Google Calendar
+**Export ▾ → Calendar (.ics)** downloads a calendar file of the project:
+
+- every task as an **all-day event** from its start to its end date (finished tasks get a ✓ in front);
+- its group, progress, subtasks (✓ / ☐) and the tasks it starts after in the event's description;
+- every **milestone** as its own one-day event, e.g. "◆ Review".
+
+To add it to Google Calendar (on a computer):
+1. *Optional but recommended:* create a separate calendar for the project — in Google Calendar, next to **Other calendars** click **+** → **Create new calendar**, and name it after the project.
+2. Open **Settings** (gear icon) → **Import & export** → **Import**.
+3. Choose the downloaded `.ics` file, pick the project's calendar, and click **Import**.
+
+**Reminders:** every event (except finished tasks) has a reminder at **09:00 on the day it starts**.
+Outlook and Apple Calendar use it. Google Calendar ignores reminders in imported
+files and uses the calendar's own default instead, so set that once: **Settings
+→ (the project's calendar) → All-day event notifications → Add notification →
+"On the day of the event at 09:00"**.
+
+The calendar is a snapshot: after changing the chart, export again. To avoid
+duplicates, delete the project's calendar (Settings → the calendar → **Remove
+calendar** → Delete) and import the new file into a fresh one. The same file
+also works in Outlook and Apple Calendar.
+
 ### Saving, export and import
 - Everything is saved automatically in your browser (`localStorage`), so your chart is still there when you reopen the file in the same browser.
-- **Export JSON** downloads your project (name, tasks and group colours) as a `.json` file named after the project.
+- **Export ▾ → JSON** downloads your project (name, tasks and group colours) as a `.json` file named after the project.
 - **Import JSON** loads a file you exported earlier. It replaces the current chart.
 
 Use export and import to back up your chart or move it to another browser or

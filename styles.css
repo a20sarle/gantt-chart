@@ -291,3 +291,21 @@
   /* While dragged, a row or bar lets the pointer "see through" it, so the app can
      tell which group is underneath (the dragged item follows the pointer) */
   .labels .row.dragging, .bar.dragging { pointer-events: none; }
+
+  /* The Export menu (a button in the save/load group with a list below it) */
+  .menu-wrap { position: relative; display: inline-flex; }
+  .menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 180px; padding: 4px;
+          background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+          box-shadow: 0 6px 20px rgba(0,0,0,.15); display: flex; flex-direction: column; }
+  .menu[hidden] { display: none; }
+  .seg .menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px; }
+  .seg .menu button:hover, .seg .menu button:focus-visible { background: var(--weekend); outline: none; }
+
+  /* "Coming up" notice, bottom right */
+  .notice { position: fixed; right: 16px; bottom: 16px; z-index: 30; width: min(340px, calc(100vw - 32px));
+            background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+            border-left: 4px solid var(--accent); padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  .notice[hidden] { display: none; }
+  .notice h2 { font-size: 13px; margin: 0 0 4px; }
+  .notice ul { margin: 0 0 10px; padding-left: 18px; font-size: 13px; }
+  .notice .actions { display: flex; justify-content: flex-end; }

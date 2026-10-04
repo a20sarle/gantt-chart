@@ -90,6 +90,8 @@ function syncGroupColors() {
 const parse = s => new Date(s + 'T00:00:00Z');
 const fmt = d => d.toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((b - a) / DAY);
+// Today's date as "YYYY-MM-DD" in the user's own time zone (not UTC)
+const todayString = () => { const d = new Date(); return fmt(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))); };
 
 // ---- Form ----
 form.addEventListener('submit', async e => {
@@ -309,31 +311,87 @@ function removeTask(id) {
 }
 
 // ---- Toolbar ----
-// Zoom (the width of one day, in px): Day / Week / Month set a preset, and
-// pinching zooms to anything in between. The last zoom is remembered.
-const VIEWS = { day: 28, week: 12, month: 4 };
+// Zoom is the width of one day, in px. Pinching zooms freely; the last zoom is
+// remembered. A day can be as wide as the whole timeline (for the Day view).
 const ZOOM_KEY = 'simple-gantt-zoom';
-let zoom = VIEWS.day;
-try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= 2 && z <= 60) zoom = z; } catch {}
-function setZoom(px) {
-  overviewReturn = null; // any other zoom leaves the overview
-  px = Math.min(60, Math.max(2, px));
+const MIN_DAY_W = 2;
+const maxDayW = () => Math.max(60, chartEl.clientWidth - LABELS_W);
+let zoom = 28;
+try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= MIN_DAY_W && z <= 5000) zoom = z; } catch {}
+function setZoom(px, { keepView = false } = {}) {
+  overviewReturn = null;                // any other zoom leaves the overview
+  if (!keepView) showView(null);        // ...and pinching leaves Day / Week / Month / Quarter
+  px = Math.min(maxDayW(), Math.max(MIN_DAY_W, px));
   zoom = px;
   try { localStorage.setItem(ZOOM_KEY, px); } catch {}
   render();
 }
+
+// ---- Day / Week / Month / Quarter, like a calendar app ----
+// Each shows exactly one period across the timeline: the day, week (Monday to
+// Sunday), month or quarter around the date you're looking at. ‹ and › step one
+// period back or forward, Today jumps to today's period. The view is remembered.
+const VIEW_KEY = 'simple-gantt-view';
+let view = null;       // 'day' | 'week' | 'month' | 'quarter' | null (free zoom)
+let viewDate = null;   // a date ("YYYY-MM-DD") inside the period shown
+let viewRange = null;  // { start, end } of the period shown, kept inside the chart's range
+function showView(v) {
+  view = v;
+  if (!v) viewRange = null;
+  try { v ? localStorage.setItem(VIEW_KEY, v) : localStorage.removeItem(VIEW_KEY); } catch {}
+}
+
+// The period of a view that contains `date`: { start, end } (end included)
+function periodOf(v, date) {
+  const d = parse(date), y = d.getUTCFullYear(), m = d.getUTCMonth();
+  const at = (yy, mm, dd) => fmt(new Date(Date.UTC(yy, mm, dd)));
+  if (v === 'day') return { start: date, end: date };
+  if (v === 'week') {
+    const monday = new Date(+d - ((d.getUTCDay() || 7) - 1) * DAY);
+    return { start: fmt(monday), end: fmt(new Date(+monday + 6 * DAY)) };
+  }
+  if (v === 'month') return { start: at(y, m, 1), end: at(y, m + 1, 0) };
+  const q = m - m % 3;                                                       // quarter
+  return { start: at(y, q, 1), end: at(y, q + 3, 0) };
+}
+
+// Shows view `v` for the period containing `date`
+function openView(v, date) {
+  const p = periodOf(v, date);
+  showView(v);
+  viewDate = date;
+  viewRange = p;
+  const days = daysBetween(parse(p.start), parse(p.end)) + 1;
+  setZoom((chartEl.clientWidth - LABELS_W) / days, { keepView: true });
+  chartEl.scrollLeft = daysBetween(chartStart, parse(p.start)) * renderedDayW;
+  tidyHeaderLabels();
+}
+
 document.getElementById('viewBtns').onclick = e => {
   const btn = e.target.closest('[data-view]');
-  if (btn) setZoom(VIEWS[btn.dataset.view]);
+  if (btn) openView(btn.dataset.view, view ? viewDate : todayString());
 };
+
+// ‹ and ›: one period back or forward (one screen when zoomed freely)
+function step(dir) {
+  if (!view) { chartEl.scrollLeft += dir * (chartEl.clientWidth - LABELS_W); return; }
+  const d = parse(viewDate), y = d.getUTCFullYear(), m = d.getUTCMonth();
+  const next = view === 'day' ? new Date(+d + dir * DAY)
+    : view === 'week' ? new Date(+d + dir * 7 * DAY)
+    : new Date(Date.UTC(y, m + dir * (view === 'month' ? 1 : 3), 1));
+  openView(view, fmt(next));
+}
+document.getElementById('prevBtn').onclick = () => step(-1);
+document.getElementById('nextBtn').onclick = () => step(1);
 
 // Scrolls the chart so today sits a little in from the left edge of the timeline
 function scrollToToday() {
   if (!timelineEl()) return;
-  const x = daysBetween(chartStart, parse(fmt(new Date()))) * renderedDayW;
+  const x = daysBetween(chartStart, parse(todayString())) * renderedDayW;
   chartEl.scrollLeft = Math.max(0, x - (chartEl.clientWidth - LABELS_W) / 4);
 }
-document.getElementById('todayBtn').onclick = scrollToToday;
+// Today: today's period in Day / Week / Month / Quarter, otherwise scroll to today
+document.getElementById('todayBtn').onclick = () => view ? openView(view, todayString()) : scrollToToday();
 
 // Overview: zoom so the whole project (first start to last end, plus a day on
 // each side) fits the visible width, and scroll to the top. Clicking again goes
@@ -364,7 +422,7 @@ document.getElementById('overviewBtn').onclick = () => {
 let exportOpts = null; // { dayW, first, last } while rendering that copy
 const IMAGE_W = 1600;  // width the image aims for
 const longDate = d => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const fileSlug = () => `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'gantt'}-${fmt(new Date())}`;
+const fileSlug = () => `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'gantt'}-${todayString()}`;
 
 // Fills #exportArea with the title and a copy of the chart fitted to about
 // `targetW` px wide. Returns the area, or null when there are no tasks.
@@ -407,7 +465,7 @@ function loadImageLib() {
 }
 
 document.getElementById('imageBtn').onclick = async () => {
-  const btn = document.getElementById('imageBtn');
+  const btn = document.getElementById('exportMenuBtn'); // shows "Saving…" while the image is made
   const area = buildExport(IMAGE_W);
   if (!area) return;
   btn.disabled = true; btn.textContent = 'Saving…';
@@ -424,7 +482,7 @@ document.getElementById('imageBtn').onclick = async () => {
       'Saving an image needs an internet connection (it loads a small helper from cdnjs).', 'OK');
   } finally {
     area.classList.remove('capturing'); area.innerHTML = '';
-    btn.disabled = false; btn.textContent = 'Save image';
+    btn.disabled = false; btn.textContent = 'Export ▾';
   }
 };
 
@@ -433,12 +491,11 @@ document.getElementById('imageBtn').onclick = async () => {
 // pointer or between the fingers. Ordinary scrolling is left to the browser:
 // up/down scrolls the chart and list, sideways moves through time.
 // Trackpad pinches arrive as Ctrl+wheel, so Ctrl + mouse wheel zooms as well.
-const MIN_DAY_W = 2, MAX_DAY_W = 60;
 let zoomPending = null; // { px, clientX }: applied once per animation frame
 
 // Zooms to `px` per day, keeping the day under screen position `clientX` in place
 function zoomTo(px, clientX) {
-  px = Math.min(MAX_DAY_W, Math.max(MIN_DAY_W, px));
+  px = Math.min(maxDayW(), Math.max(MIN_DAY_W, px));
   if (!zoomPending) requestAnimationFrame(applyZoom);
   zoomPending = { px, clientX };
 }
@@ -499,6 +556,117 @@ document.getElementById('clearBtn').onclick = async () => {
     tasks = []; save(); render();
   }
 };
+// ---- Export menu: Image (.png), Calendar (.ics), JSON ----
+// Opens on click; closes when an item is picked, on a click elsewhere, or with Esc.
+const exportMenuBtn = document.getElementById('exportMenuBtn');
+const exportMenu = document.getElementById('exportMenu');
+function showExportMenu(open) {
+  exportMenu.hidden = !open;
+  exportMenuBtn.setAttribute('aria-expanded', open);
+  if (open) exportMenu.querySelector('button').focus();
+}
+exportMenuBtn.onclick = () => showExportMenu(exportMenu.hidden);
+exportMenu.addEventListener('click', e => { if (e.target.closest('button')) showExportMenu(false); });
+document.addEventListener('pointerdown', e => {
+  if (!exportMenu.hidden && !e.target.closest('.menu-wrap')) showExportMenu(false);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !exportMenu.hidden) { showExportMenu(false); exportMenuBtn.focus(); }
+});
+
+// ---- "Coming up" notice ----
+// When the app opens (and again after midnight if it stays open), a notice
+// lists the unfinished tasks that start today and later this week (weeks run
+// Monday to Sunday). OK hides it until the next day.
+const NOTICE_KEY = 'simple-gantt-notice-seen'; // the day the notice was last closed
+function checkComingUp() {
+  const today = todayString();
+  let seen = null;
+  try { seen = localStorage.getItem(NOTICE_KEY); } catch {}
+  const box = document.getElementById('notice');
+  if (seen === today) { box.hidden = true; return; }
+  const dow = parse(today).getUTCDay() || 7;                         // Monday = 1 … Sunday = 7
+  const sunday = fmt(new Date(+parse(today) + (7 - dow) * DAY));
+  const open = tasks.filter(t => progressOf(t) < 100).sort((a, b) => a.start.localeCompare(b.start));
+  const startingToday = open.filter(t => t.start === today);
+  const laterThisWeek = open.filter(t => t.start > today && t.start <= sunday);
+  if (!startingToday.length && !laterThisWeek.length) { box.hidden = true; return; }
+  const dayName = s => parse(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const item = (t, withDay) => `<li><b>${esc(t.name)}</b>${t.group ? ` · ${esc(t.group)}` : ''}${withDay ? ` · ${dayName(t.start)}` : ''}</li>`;
+  box.innerHTML = `
+    ${startingToday.length ? `<h2>Starting today</h2><ul>${startingToday.map(t => item(t, false)).join('')}</ul>` : ''}
+    ${laterThisWeek.length ? `<h2>Later this week</h2><ul>${laterThisWeek.map(t => item(t, true)).join('')}</ul>` : ''}
+    <div class="actions"><button class="primary" id="noticeOk">OK</button></div>`;
+  box.hidden = false;
+  document.getElementById('noticeOk').onclick = () => {
+    try { localStorage.setItem(NOTICE_KEY, today); } catch {}
+    box.hidden = true;
+  };
+}
+setInterval(checkComingUp, 30 * 60 * 1000); // if the app stays open past midnight
+
+// ---- Export calendar (.ics) ----
+// A calendar file for Google Calendar, Outlook or Apple Calendar: every task is
+// an all-day event from its start to its end date (finished tasks get a ✓), with
+// its group, progress, subtasks and links in the description; every milestone
+// is its own one-day event "◆ Name". Event ids stay the same between exports.
+function buildCalendar() {
+  const ymd = s => s.replace(/-/g, '');                                   // 2026-10-06 -> 20261006
+  const nextDay = s => ymd(fmt(new Date(+parse(s) + DAY)));                // all-day DTEND is exclusive
+  const text = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');   // 20261004T101500Z
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Simple Gantt//EN', 'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH', `X-WR-CALNAME:${text(projectName)}`];
+  const event = (uid, start, endIncl, summary, description, group) => lines.push(
+    'BEGIN:VEVENT', `UID:${uid}@simple-gantt`, `DTSTAMP:${stamp}`,
+    `DTSTART;VALUE=DATE:${ymd(start)}`, `DTEND;VALUE=DATE:${nextDay(endIncl)}`,
+    `SUMMARY:${text(summary)}`, `DESCRIPTION:${text(description)}`,
+    ...(group ? [`CATEGORIES:${text(group)}`] : []), 'TRANSP:TRANSPARENT',
+    // A reminder at 09:00 on the day it starts (9 hours after the all-day event
+    // begins); finished tasks (marked ✓) don't need one
+    ...(summary.startsWith('✓ ') ? [] : ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${text(summary)} starts today`, 'TRIGGER:PT9H', 'END:VALARM']),
+    'END:VEVENT');
+
+  for (const t of [...tasks].sort((a, b) => a.start.localeCompare(b.start))) {
+    const subs = t.subtasks || [], pct = progressOf(t);
+    const after = (t.after || []).map(id => tasks.find(x => x.id === id)?.name).filter(Boolean);
+    const info = [
+      `Project: ${projectName}`,
+      t.group ? `Group: ${t.group}` : '',
+      subs.length ? `Progress: ${pct}% (${subs.filter(s => s.done).length}/${subs.length} subtasks)` : (t.done ? 'Done' : ''),
+      ...(subs.length ? ['Subtasks:', ...subs.map(s => `${s.done ? '✓' : '☐'} ${s.name}`)] : []),
+      after.length ? `Starts after: ${after.join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+    event(t.id, t.start, t.end, `${pct === 100 ? '✓ ' : ''}${t.name}`, info, t.group);
+    if (t.milestone) {
+      const day = t.milestone === 'start' ? t.start : t.end;
+      event(`${t.id}-milestone`, day, day, `◆ ${t.name}`, `Milestone (${t.milestone} of ${t.name})\n${info}`, t.group);
+    }
+  }
+  lines.push('END:VCALENDAR');
+
+  // Lines longer than 75 bytes are folded onto the next line, starting with a space
+  const enc = new TextEncoder();
+  const fold = line => {
+    const out = [];
+    let cur = '';
+    for (const ch of line) {
+      if (enc.encode(cur + ch).length > (out.length ? 74 : 75)) { out.push(cur); cur = ''; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.join('\r\n ');
+  };
+  return lines.map(fold).join('\r\n') + '\r\n';
+}
+
+document.getElementById('calendarBtn').onclick = () => {
+  if (!tasks.length) return;
+  const blob = new Blob([buildCalendar()], { type: 'text/calendar;charset=utf-8' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${fileSlug()}.ics` });
+  a.click(); URL.revokeObjectURL(a.href);
+};
+
 document.getElementById('exportBtn').onclick = () => {
   syncGroupColors();
   const blob = new Blob([JSON.stringify({ name: projectName, tasks, groupColors }, null, 2)], { type: 'application/json' });
@@ -1092,9 +1260,9 @@ function render() {
   // tasks), plus one visible width of extra days on each side, so there's always
   // room to scroll and to zoom around any day under the pointer, plus any extra
   // days added while dragging past the ends.
-  const todayDate = parse(fmt(new Date()));
-  let min = Math.min(+todayDate, ...sorted.map(t => +parse(t.start)));
-  let max = Math.max(+todayDate + (sorted.length ? 0 : 27 * DAY), ...sorted.map(t => +parse(t.end)));
+  const todayDate = parse(todayString());
+  let min = Math.min(+todayDate, ...sorted.map(t => +parse(t.start)), ...(viewRange ? [+parse(viewRange.start)] : []));
+  let max = Math.max(+todayDate + (sorted.length ? 0 : 27 * DAY), ...sorted.map(t => +parse(t.end)), ...(viewRange ? [+parse(viewRange.end)] : []));
   const pad = Math.max(2, Math.ceil((chartEl.clientWidth - LABELS_W) / dayW));
   min = new Date(min - (pad + viewExtra.left) * DAY); max = new Date(max + (pad + viewExtra.right) * DAY);
   if (exportOpts) { // the saved image: just the project, with a day either side
@@ -1107,9 +1275,10 @@ function render() {
   const compact = dayW < 18; // zoomed out (no day numbers): fainter day lines, tighter bars
 
   document.getElementById('overviewBtn').classList.toggle('active', !!overviewReturn);
-  for (const [v, px] of Object.entries(VIEWS)) {
-    document.querySelector(`#viewBtns [data-view="${v}"]`).classList.toggle('active', Math.abs(dayW - px) < 0.5);
-  }
+  for (const b of document.querySelectorAll('#viewBtns [data-view]')) b.classList.toggle('active', b.dataset.view === view);
+  const unit = { day: 'day', week: 'week', month: 'month', quarter: 'quarter' }[view] || 'screen';
+  document.getElementById('prevBtn').title = `Previous ${unit}`;
+  document.getElementById('nextBtn').title = `Next ${unit}`;
 
   // Header rows, top to bottom: quarter, month + year, ISO week, day number.
   // Quarter, month and week labels sit in a block as wide as their period and
@@ -1129,7 +1298,10 @@ function render() {
       // Every day is its own column; week and month starts get a stronger line
       const cls = (dow === 0 || dow === 6 ? ' weekend' : '') + (dow === 1 ? ' week-start' : '') + (d.getUTCDate() === 1 ? ' month-start' : '');
       grid += `<div class="day${cls}" style="left:${i * dayW}px;width:${dayW}px"></div>`;
-      if (dayW >= 18) head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}" style="left:${i * dayW}px;width:${dayW}px">${d.getUTCDate()}</div>`;
+      if (dayW >= 18) {
+        const label = dayW >= 70 ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }) : d.getUTCDate();
+        head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}" style="left:${i * dayW}px;width:${dayW}px">${label}</div>`;
+      }
     }
     if (i === 0) continue;
     if (last || d.getUTCDate() === 1) { // a month ends here
@@ -1366,7 +1538,7 @@ function esc(s) {
 
 // Seed with an example on first run so the chart isn't empty
 if (tasks === null) {
-  const t0 = new Date(); t0.setUTCHours(0, 0, 0, 0);
+  const t0 = parse(todayString());
   const at = n => fmt(new Date(+t0 + n * DAY));
   tasks = [
     { id: uid(), name: 'Research', group: 'Planning', start: at(-3), end: at(2), done: true },
@@ -1386,4 +1558,11 @@ if (tasks === null) {
   save();
 }
 render();
-scrollToToday(); // open on today
+// Open on the remembered Day / Week / Month / Quarter for today, or scroll to today
+(() => {
+  let v = null;
+  try { v = localStorage.getItem(VIEW_KEY); } catch {}
+  if (['day', 'week', 'month', 'quarter'].includes(v)) openView(v, todayString());
+  else scrollToToday();
+})();
+checkComingUp();

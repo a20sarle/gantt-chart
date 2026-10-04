@@ -6,7 +6,7 @@
 <title>Simple Gantt</title>
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever styles.css or app.js changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-04.5">
+<link rel="stylesheet" href="styles.css?v=2026-10-04.9">
 </head>
 <body>
 <main>
@@ -38,19 +38,28 @@
       <!-- What the chart shows, as one joined group. Day / Week / Month set the
            zoom to a preset (pinching zooms freely); Today and Overview move the view. -->
       <div class="seg" id="viewBtns" role="group" aria-label="View">
-        <button data-view="day">Day</button>
-        <button data-view="week">Week</button>
-        <button data-view="month">Month</button>
-        <button id="todayBtn" title="Scroll to today">Today</button>
+        <button data-view="day" title="Show one day">Day</button>
+        <button data-view="week" title="Show one week (Monday to Sunday)">Week</button>
+        <button data-view="month" title="Show one month">Month</button>
+        <button data-view="quarter" title="Show one quarter">Quarter</button>
+        <button id="prevBtn" title="Previous" aria-label="Previous">‹</button>
+        <button id="todayBtn" title="Go to today">Today</button>
+        <button id="nextBtn" title="Next" aria-label="Next">›</button>
         <button id="overviewBtn" title="Fit the whole project in view (click again to go back)">Overview</button>
       </div>
       <button id="collapseAllBtn" hidden>Collapse all</button>
       <span class="spacer"></span>
-      <!-- Saving and loading, as one joined group -->
+      <!-- Saving and loading, as one joined group: an Export menu and Import -->
       <div class="seg" role="group" aria-label="Save and load">
-        <button id="imageBtn" title="Download a picture (PNG) of the whole chart">Save image</button>
-        <button id="exportBtn" title="Download the project as a file you can import later">Export JSON</button>
-        <button id="importBtn" title="Load a project from an exported file">Import JSON</button>
+        <div class="menu-wrap">
+          <button id="exportMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu">Export ▾</button>
+          <div class="menu" id="exportMenu" role="menu" hidden>
+            <button role="menuitem" id="imageBtn" title="A picture of the whole chart">Image (.png)</button>
+            <button role="menuitem" id="calendarBtn" title="For Google Calendar, Outlook or Apple Calendar">Calendar (.ics)</button>
+            <button role="menuitem" id="exportBtn" title="The whole project, to import again later">JSON</button>
+          </div>
+        </div>
+        <button id="importBtn" title="Load a project from an exported JSON file">Import JSON</button>
       </div>
       <button id="clearBtn">Clear all</button>
       <input id="importFile" type="file" accept="application/json" hidden>
@@ -96,9 +105,12 @@
   </form>
 </dialog>
 
+<!-- "Coming up": tasks starting today and later this week (filled by app.js) -->
+<aside id="notice" class="notice" role="status" aria-live="polite" hidden></aside>
+
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-04.5"></script>
+<script src="app.js?v=2026-10-04.9"></script>
 </body>
 </html>
