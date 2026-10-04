@@ -7,6 +7,27 @@ let tasks = load();
 let groupColors = loadGroupColors();
 let editingId = null;
 
+// ---- Project name (click the heading to rename) ----
+const NAME_KEY = 'simple-gantt-name';
+const DEFAULT_NAME = 'My project';
+const nameEl = document.getElementById('projectName');
+let projectName = (() => { try { return localStorage.getItem(NAME_KEY) || DEFAULT_NAME; } catch { return DEFAULT_NAME; } })();
+function showProjectName() {
+  nameEl.textContent = projectName;
+  document.title = `${projectName} · Simple Gantt`;
+}
+function setProjectName(name) {
+  projectName = name.trim().replace(/\s+/g, ' ') || DEFAULT_NAME;
+  try { localStorage.setItem(NAME_KEY, projectName); } catch {}
+  showProjectName();
+}
+nameEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+  if (e.key === 'Escape') { nameEl.textContent = projectName; nameEl.blur(); }
+});
+nameEl.addEventListener('blur', () => setProjectName(nameEl.textContent));
+showProjectName();
+
 const form = document.getElementById('taskForm');
 const errorEl = document.getElementById('error');
 const chartEl = document.getElementById('chart');
@@ -295,6 +316,8 @@ const VIEWS = { day: 28, week: 12, month: 4 };
 const ZOOM_KEY = 'simple-gantt-zoom';
 try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= 2 && z <= 60) zoomEl.value = z; } catch {}
 function setZoom(px) {
+  overviewReturn = null; // any other zoom leaves the overview
+  px = Math.min(60, Math.max(2, px));
   zoomEl.value = px;
   try { localStorage.setItem(ZOOM_KEY, px); } catch {}
   render();
@@ -305,14 +328,187 @@ document.getElementById('viewBtns').onclick = e => {
   if (btn) setZoom(VIEWS[btn.dataset.view]);
 };
 
-// Scrolls the chart so today sits a little in from the left edge
+// Scrolls the chart so today sits a little in from the left edge of the timeline
 function scrollToToday() {
-  const tl = timelineEl();
-  if (!tl) return;
+  if (!timelineEl()) return;
   const x = daysBetween(chartStart, parse(fmt(new Date()))) * renderedDayW;
-  tl.scrollLeft = Math.max(0, x - tl.clientWidth / 4);
+  chartEl.scrollLeft = Math.max(0, x - (chartEl.clientWidth - LABELS_W) / 4);
 }
 document.getElementById('todayBtn').onclick = scrollToToday;
+
+// Overview: zoom so the whole project (first start to last end, plus a day on
+// each side) fits the visible width, and scroll to the top. Clicking again goes
+// back to the zoom and position from before.
+let overviewReturn = null; // { dayW, leftDay, top } while the overview is showing
+document.getElementById('overviewBtn').onclick = () => {
+  if (overviewReturn) {
+    const back = overviewReturn;
+    setZoom(back.dayW); // also clears overviewReturn
+    chartEl.scrollLeft = (back.leftDay - dayNumber(chartStart)) * renderedDayW;
+    chartEl.scrollTop = back.top;
+    return render(); // refresh the button
+  }
+  if (!tasks.length) return;
+  const back = { dayW: renderedDayW, leftDay: dayNumber(chartStart) + chartEl.scrollLeft / renderedDayW, top: chartEl.scrollTop };
+  const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
+  const days = daysBetween(first, last) + 1 + 2; // the project plus a day either side
+  setZoom((chartEl.clientWidth - LABELS_W) / days); // setZoom keeps it within 2..60 px per day
+  chartEl.scrollLeft = daysBetween(chartStart, first - DAY) * renderedDayW;
+  chartEl.scrollTop = 0;
+  overviewReturn = back;
+  render(); // refresh the button
+};
+
+// ---- Sharing: print / PDF and image ----
+// Both use a copy of the whole chart (just the project's dates, every row,
+// always in light colours) with the project name and date above it.
+let exportOpts = null; // { dayW, first, last } while rendering that copy
+const PRINT_W = 1040;  // usable width of an A4 landscape page at 96 dpi (10 mm margins)
+const IMAGE_W = 1600;  // width the image aims for
+const longDate = d => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const fileSlug = () => `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'gantt'}-${fmt(new Date())}`;
+
+// Fills #exportArea with the title and a copy of the chart fitted to about
+// `targetW` px wide. Returns the area (with the chart's width in px as
+// `area.chartWidth`), or null when there are no tasks.
+function buildExport(targetW) {
+  if (!tasks.length) return null;
+  const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
+  const days = daysBetween(first, last) + 3;
+  const keep = { leftDay: dayNumber(chartStart) + chartEl.scrollLeft / renderedDayW, top: chartEl.scrollTop };
+  // Draw the chart at the export size, copy it, then draw the normal view again
+  // (all in one go, so the screen never shows the export version)
+  const dayW = Math.min(28, Math.max(2, (targetW - LABELS_W) / days));
+  exportOpts = { dayW, first, last };
+  render();
+  const chart = chartEl.querySelector('.chart').cloneNode(true);
+  exportOpts = null;
+  render();
+  chartEl.scrollLeft = (keep.leftDay - dayNumber(chartStart)) * renderedDayW;
+  chartEl.scrollTop = keep.top;
+
+  chart.querySelectorAll('.hspan > span').forEach(l => { l.style.visibility = ''; }); // no scrolling in the copy
+  const area = document.getElementById('exportArea');
+  area.innerHTML = `<header class="export-title"><h1>${esc(projectName)}</h1>
+    <p>Made ${longDate(Date.now())} · ${longDate(first)} – ${longDate(last)}</p></header>`;
+  area.appendChild(chart);
+  area.chartWidth = LABELS_W + days * dayW; // worked out, not measured: the area is hidden on screen
+  return area;
+}
+
+document.getElementById('printBtn').onclick = () => {
+  const area = buildExport(PRINT_W);
+  if (!area) return;
+  // Shrink to fit the page if the chart is still wider (very long projects)
+  area.style.zoom = area.chartWidth > PRINT_W ? PRINT_W / area.chartWidth : '';
+  window.print();
+};
+window.addEventListener('afterprint', () => {
+  const area = document.getElementById('exportArea');
+  area.innerHTML = ''; area.style.zoom = '';
+});
+
+// The image library (html-to-image) is loaded from cdnjs the first time it's needed
+let imageLib = null;
+function loadImageLib() {
+  return imageLib ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.13/html-to-image.js';
+    s.integrity = 'sha512-4W7+nCTcMQMFBnTRwvixN7il649NCqZiBfJ7WvzU7gxF12zOnaKwVYTSIzwrjy/cy+CPQxn2lAIVZIes+rPp2Q==';
+    s.crossOrigin = 'anonymous';
+    s.onload = () => resolve(window.htmlToImage);
+    s.onerror = () => { imageLib = null; reject(new Error('offline')); };
+    document.head.appendChild(s);
+  });
+}
+
+document.getElementById('imageBtn').onclick = async () => {
+  const btn = document.getElementById('imageBtn');
+  const area = buildExport(IMAGE_W);
+  if (!area) return;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  area.classList.add('capturing'); // laid out off-screen so it can be photographed
+  try {
+    const lib = await loadImageLib();
+    const url = await lib.toPng(area, {
+      pixelRatio: 2, backgroundColor: '#ffffff',
+      style: { position: 'static', left: '0', top: '0' }, // the picture itself isn't off-screen
+    });
+    Object.assign(document.createElement('a'), { href: url, download: `${fileSlug()}.png` }).click();
+  } catch {
+    await askConfirm('Could not save the image',
+      'Saving an image needs an internet connection (it loads a small helper from cdnjs). Print / PDF works offline.', 'OK');
+  } finally {
+    area.classList.remove('capturing'); area.innerHTML = '';
+    btn.disabled = false; btn.textContent = 'Save image';
+  }
+};
+
+// ---- Zooming by pinching ----
+// Only a pinch zooms (trackpad, phone, Safari on a Mac), around the day under the
+// pointer or between the fingers. Ordinary scrolling is left to the browser:
+// up/down scrolls the chart and list, sideways moves through time.
+// Trackpad pinches arrive as Ctrl+wheel, so Ctrl + mouse wheel zooms as well.
+const MIN_DAY_W = 2, MAX_DAY_W = 60;
+let zoomPending = null; // { px, clientX }: applied once per animation frame
+
+// Zooms to `px` per day, keeping the day under screen position `clientX` in place
+function zoomTo(px, clientX) {
+  px = Math.min(MAX_DAY_W, Math.max(MIN_DAY_W, px));
+  if (!zoomPending) requestAnimationFrame(applyZoom);
+  zoomPending = { px, clientX };
+}
+const zoomBy = (factor, clientX) => zoomTo((zoomPending ? zoomPending.px : renderedDayW) * factor, clientX);
+
+function applyZoom() {
+  const { px, clientX } = zoomPending;
+  zoomPending = null;
+  if (Math.abs(px - renderedDayW) < 0.01) return;
+  const anchorX = clientX - (chartEl.getBoundingClientRect().left + LABELS_W); // from the timeline's visible left edge
+  const day = pointerDay(clientX);
+  setZoom(px);
+  chartEl.scrollLeft = (day - dayNumber(chartStart)) * renderedDayW - anchorX;
+}
+
+chartEl.addEventListener('wheel', e => {
+  const tl = timelineEl();
+  if (!e.ctrlKey || !tl || !tl.contains(e.target) || drag) return; // plain scrolling: left to the browser
+  e.preventDefault(); // stop the browser zooming the whole page
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? tl.clientWidth : 1; // lines/pages -> px
+  // Pinches send small steps; a Ctrl + mouse-wheel notch sends ~100 (≈ 15% per notch)
+  const dy = e.deltaY * unit;
+  zoomBy(Math.exp(-dy * (Math.abs(dy) >= 50 ? 0.0015 : 0.01)), e.clientX);
+}, { passive: false });
+
+// Safari on a Mac reports trackpad pinches as gesture events instead
+let gestureStartW = null;
+chartEl.addEventListener('gesturestart', e => {
+  if (!timelineEl()?.contains(e.target)) return;
+  e.preventDefault();
+  gestureStartW = renderedDayW;
+});
+chartEl.addEventListener('gesturechange', e => {
+  if (gestureStartW === null) return;
+  e.preventDefault();
+  zoomTo(gestureStartW * e.scale, e.clientX);
+});
+chartEl.addEventListener('gestureend', () => { gestureStartW = null; });
+
+// Phones and tablets: two-finger pinch on the timeline
+let pinch = null;
+const touchGap = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+chartEl.addEventListener('touchstart', e => {
+  if (e.touches.length !== 2 || !timelineEl()?.contains(e.target)) return;
+  cancelDrag(); // the first finger may have started a drag
+  pinch = { gap: touchGap(e.touches[0], e.touches[1]), dayW: renderedDayW };
+}, { passive: true });
+chartEl.addEventListener('touchmove', e => {
+  if (!pinch || e.touches.length !== 2) return;
+  e.preventDefault();
+  const [a, b] = e.touches;
+  zoomTo(pinch.dayW * touchGap(a, b) / pinch.gap, (a.clientX + b.clientX) / 2);
+}, { passive: false });
+chartEl.addEventListener('touchend', e => { if (e.touches.length < 2) pinch = null; });
 
 document.getElementById('clearBtn').onclick = async () => {
   if (tasks.length && await askConfirm('Delete all tasks?', 'Every task, group and link will be removed. Export first if you want a copy.', 'Delete all')) {
@@ -321,8 +517,8 @@ document.getElementById('clearBtn').onclick = async () => {
 };
 document.getElementById('exportBtn').onclick = () => {
   syncGroupColors();
-  const blob = new Blob([JSON.stringify({ tasks, groupColors }, null, 2)], { type: 'application/json' });
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'gantt.json' });
+  const blob = new Blob([JSON.stringify({ name: projectName, tasks, groupColors }, null, 2)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${fileSlug()}.json` });
   a.click(); URL.revokeObjectURL(a.href);
 };
 document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
@@ -330,8 +526,9 @@ document.getElementById('importFile').onchange = async e => {
   const file = e.target.files[0]; if (!file) return;
   try {
     let data = JSON.parse(await file.text());
-    // Accepts { tasks, groupColors } or an older plain array of tasks
+    // Accepts { name, tasks, groupColors } or an older plain array of tasks
     groupColors = (!Array.isArray(data) && data.groupColors) || {};
+    if (!Array.isArray(data) && data.name) setProjectName(String(data.name));
     if (!Array.isArray(data)) data = data.tasks;
     if (!Array.isArray(data)) throw 0;
     tasks = data.map(t => ({
@@ -508,15 +705,17 @@ let displayedGroups = [];           // group names in the order last shown
 
 const ROW_H = 36;     // height of one row in the list and the chart (matches styles.css)
 const LABELS_W = 220; // width of the list column (matches .chart in styles.css)
+const HEAD_H = 77;    // height of the date header incl. its border (matches .head in styles.css)
 const timelineEl = () => chartEl.querySelector('.timeline');
 const dayNumber = d => Math.round(d / DAY);
 const dayString = n => fmt(new Date(n * DAY));
 const groupLabel = g => g || 'Ungrouped';
 
 // The (fractional) day under a screen x position, independent of scrolling
+// (the track moves with the scroll, so its left edge is day 0 of the chart)
 function pointerDay(clientX) {
-  const tl = timelineEl(), r = tl.getBoundingClientRect();
-  return dayNumber(chartStart) + (clientX - r.left + tl.scrollLeft) / renderedDayW;
+  const r = chartEl.querySelector('.track').getBoundingClientRect();
+  return dayNumber(chartStart) + (clientX - r.left) / renderedDayW;
 }
 
 function draggedDates({ task, mode, days }) {
@@ -555,7 +754,7 @@ function newGroupOf(d) {
 function applyDragVisual() {
   if (!drag || !drag.moved) return;
   const dayW = renderedDayW;
-  const dy = drag.lastY + scrollY - drag.pageY0; // vertical distance moved, incl. page scroll
+  const dy = drag.lastY + chartEl.scrollTop - drag.pageY0; // vertical distance moved, incl. scrolling
 
   // Highlight the header of the group a task is being moved to
   chartEl.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
@@ -619,24 +818,26 @@ function autoScroll() {
   if (!drag || !drag.moved) return;
   const EDGE = 48;
   const speed = dist => Math.ceil(Math.min(1, dist / EDGE) * 14); // px per frame, faster nearer the edge
-  let tl = timelineEl(), r = tl.getBoundingClientRect();
+  // The visible part of the timeline: right of the (pinned) task list, below the (pinned) dates
+  const box = chartEl.getBoundingClientRect();
+  const r = { left: box.left + LABELS_W, right: box.left + chartEl.clientWidth, top: box.top + HEAD_H, bottom: box.top + chartEl.clientHeight };
   // Compare with the drawn days (the track), not scrollWidth: the dragged bar
   // itself can stick out past the last day and stretch the scroll area
-  const atEnd = () => tl.scrollLeft + tl.clientWidth >= tl.querySelector('.track').offsetWidth - 1;
+  const atEnd = () => chartEl.scrollLeft + chartEl.clientWidth - LABELS_W >= chartEl.querySelector('.track').offsetWidth - 1;
 
   if (drag.kind !== 'regroup') { // moving a row in the list only needs vertical scrolling
     if (drag.lastX > r.right - EDGE) {
-      if (atEnd()) { viewExtra.right += 7; render(); tl = timelineEl(); }
-      tl.scrollLeft += speed(drag.lastX - (r.right - EDGE));
+      if (atEnd()) { viewExtra.right += 7; render(); }
+      chartEl.scrollLeft += speed(drag.lastX - (r.right - EDGE));
       updateDrag();
     } else if (drag.lastX < r.left + EDGE) {
-      if (tl.scrollLeft <= 0) { viewExtra.left += 7; render(); tl = timelineEl(); }
-      tl.scrollLeft -= speed(r.left + EDGE - drag.lastX);
+      if (chartEl.scrollLeft <= 0) { viewExtra.left += 7; render(); }
+      chartEl.scrollLeft -= speed(r.left + EDGE - drag.lastX);
       updateDrag();
     }
   }
-  if (drag.lastY < EDGE) { window.scrollBy(0, -speed(EDGE - drag.lastY)); updateDrag(); }
-  else if (drag.lastY > innerHeight - EDGE) { window.scrollBy(0, speed(drag.lastY - (innerHeight - EDGE))); updateDrag(); }
+  if (drag.lastY < r.top + EDGE) { chartEl.scrollTop -= speed(r.top + EDGE - drag.lastY); updateDrag(); }
+  else if (drag.lastY > r.bottom - EDGE) { chartEl.scrollTop += speed(drag.lastY - (r.bottom - EDGE)); updateDrag(); }
 
   requestAnimationFrame(autoScroll);
 }
@@ -660,7 +861,7 @@ chartEl.addEventListener('pointerdown', e => {
     rowGroup: emptyRow ? (emptyRow.dataset.rowGroup ?? null) : null, // row a create-drag started on
     rowTop: emptyRow ? emptyRow.offsetTop : 0,
     mode: bar ? (e.target.dataset.edge || 'move') : dot ? 'link' : 'move',
-    x0: e.clientX, y0: e.clientY, pageY0: e.clientY + scrollY, lastX: e.clientX, lastY: e.clientY,
+    x0: e.clientX, y0: e.clientY, pageY0: e.clientY + chartEl.scrollTop, lastX: e.clientX, lastY: e.clientY,
     day0: pointerDay(e.clientX), days: 0, moved: false, target: null, created: null,
   };
 });
@@ -790,32 +991,36 @@ const shortDate = s => parse(s).toLocaleDateString(undefined, { month: 'short', 
 
 // ---- Render ----
 function render() {
-  const dayW = +zoomEl.value;
+  const dayW = exportOpts ? exportOpts.dayW : +zoomEl.value;
   // Tasks are always listed by start date (ties keep the order they were added)
   const sorted = [...tasks].sort((a, b) => a.start.localeCompare(b.start));
 
   // Remember which day is at the left edge of the view, so re-rendering
   // (after a change, a zoom or while dragging) doesn't jump the scroll position
-  const oldTl = timelineEl();
-  const leftDay = oldTl && chartStart ? dayNumber(chartStart) + oldTl.scrollLeft / renderedDayW : null;
+  const leftDay = timelineEl() && chartStart ? dayNumber(chartStart) + chartEl.scrollLeft / renderedDayW : null;
+  const scrollTop = chartEl.scrollTop;
 
   // Range: the tasks' dates and today (or the next four weeks when there are no
-  // tasks), 2 days padding either side, plus any extra days added while dragging.
-  // When zoomed out, the chart is extended to at least fill the visible width.
+  // tasks), plus one visible width of extra days on each side, so there's always
+  // room to scroll and to zoom around any day under the pointer, plus any extra
+  // days added while dragging past the ends.
   const todayDate = parse(fmt(new Date()));
   let min = Math.min(+todayDate, ...sorted.map(t => +parse(t.start)));
   let max = Math.max(+todayDate + (sorted.length ? 0 : 27 * DAY), ...sorted.map(t => +parse(t.end)));
-  min = new Date(min - (2 + viewExtra.left) * DAY); max = new Date(max + (2 + viewExtra.right) * DAY);
-  const visibleDays = Math.ceil((chartEl.clientWidth - LABELS_W) / dayW);
-  if (daysBetween(min, max) + 1 < visibleDays) max = new Date(+min + (visibleDays - 1) * DAY);
+  const pad = Math.max(2, Math.ceil((chartEl.clientWidth - LABELS_W) / dayW));
+  min = new Date(min - (pad + viewExtra.left) * DAY); max = new Date(max + (pad + viewExtra.right) * DAY);
+  if (exportOpts) { // printing / image: just the project, with a day either side
+    min = new Date(exportOpts.first - DAY); max = new Date(exportOpts.last + DAY);
+  }
   chartStart = min;
   renderedDayW = dayW;
   const totalDays = daysBetween(min, max) + 1;
   const width = totalDays * dayW;
   const compact = dayW < 18; // zoomed out (no day numbers): fainter day lines, tighter bars
 
+  document.getElementById('overviewBtn').classList.toggle('active', !!overviewReturn);
   for (const [v, px] of Object.entries(VIEWS)) {
-    document.querySelector(`#viewBtns [data-view="${v}"]`).classList.toggle('active', dayW === px);
+    document.querySelector(`#viewBtns [data-view="${v}"]`).classList.toggle('active', Math.abs(dayW - px) < 0.5);
   }
 
   // Header rows, top to bottom: quarter, month + year, ISO week, day number.
@@ -836,7 +1041,7 @@ function render() {
       // Every day is its own column; week and month starts get a stronger line
       const cls = (dow === 0 || dow === 6 ? ' weekend' : '') + (dow === 1 ? ' week-start' : '') + (d.getUTCDate() === 1 ? ' month-start' : '');
       grid += `<div class="day${cls}" style="left:${i * dayW}px;width:${dayW}px"></div>`;
-      if (dayW >= 18) head += `<div class="day-label" style="left:${i * dayW}px;width:${dayW}px">${d.getUTCDate()}</div>`;
+      if (dayW >= 18) head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}" style="left:${i * dayW}px;width:${dayW}px">${d.getUTCDate()}</div>`;
     }
     if (i === 0) continue;
     if (last || d.getUTCDate() === 1) { // a month ends here
@@ -988,16 +1193,36 @@ function render() {
       <div class="timeline">
         <div class="track${compact ? ' compact' : ''}" style="width:${width}px">
           ${grid}${today}
-          <div class="head" style="position:relative">${head}</div>
+          <div class="head">${head}</div>
           ${rows}
         </div>
       </div>
     </div>`;
 
-  if (leftDay !== null) timelineEl().scrollLeft = (leftDay - dayNumber(min)) * dayW;
+  if (!exportOpts) {
+    if (leftDay !== null) chartEl.scrollLeft = (leftDay - dayNumber(min)) * dayW;
+    chartEl.scrollTop = scrollTop;
+  }
   applyDragVisual(); // re-apply an in-progress drag to the fresh elements
   if (!drag || !drag.moved) drawLinks();
+  tidyHeaderLabels();
 }
+
+// A quarter/month/week label that is being pushed out of view (its period is
+// scrolling away behind the task list) is hidden rather than shown cut off.
+function tidyHeaderLabels() {
+  const visibleLeft = chartEl.getBoundingClientRect().left + LABELS_W;
+  for (const span of chartEl.querySelectorAll('.hspan')) {
+    const label = span.firstElementChild, r = span.getBoundingClientRect();
+    label.style.visibility = r.right - Math.max(r.left, visibleLeft) < label.offsetWidth ? 'hidden' : '';
+  }
+}
+let tidyQueued = false;
+chartEl.addEventListener('scroll', () => {
+  if (tidyQueued) return;
+  tidyQueued = true;
+  requestAnimationFrame(() => { tidyQueued = false; tidyHeaderLabels(); });
+}, { passive: true });
 
 // Draws the link arrows (and, while linking, the line being dragged) in an SVG
 // layer over the chart, measured from where the bars are actually drawn.
@@ -1034,7 +1259,10 @@ function drawLinks() {
         : `M${x1} ${y1} H${x1 + 8} V${y2 + (y2 > y1 ? -ROW_H / 2 : ROW_H / 2)} H${x2 - 8} V${y2} H${x2}`;
       out += `<g class="link${conflict ? ' conflict' : ''}" data-from="${pid}" data-to="${t.id}">
         <title>${esc(pred.name)} → ${esc(t.name)}${conflict ? ' (starts before it has finished)' : ''}. Click to remove</title>
-        <path class="hit" d="${d}"/><path class="line" d="${d}"/><path class="head" d="M${x2} ${y2} l-6 -4 v8 z"/></g>`;
+        <path class="hit" d="${d}" fill="none" stroke="transparent" stroke-width="10"/>
+        <path class="line" d="${d}" fill="none" stroke="${conflict ? '#d94a3b' : '#6e6e73'}" stroke-width="1.5"/>
+        <path class="head" d="M${x2} ${y2} l-6 -4 v8 z" fill="${conflict ? '#d94a3b' : '#6e6e73'}"/></g>`;
+      // (the attributes are a fallback for the saved image; on screen styles.css decides the look)
     }
   }
   if (drag && drag.kind === 'link' && drag.moved) {

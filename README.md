@@ -110,11 +110,31 @@ the list.
 - While you scroll sideways, the current quarter, month and week stay pinned at the left edge until the next one takes over.
 - Weekends are shaded, and a red line marks today.
 - **Day / Week / Month** buttons zoom the chart to 28, 12 or 4 px per day; the **Day width** slider sets anything in between (the matching button lights up). Every day stays its own column; when zoomed out the daily lines get fainter and week and month starts get stronger lines. The app remembers your zoom.
-- The chart opens scrolled to **today**, and the **Today** button jumps back to it. The chart always includes today, and fills the full width when zoomed out.
+- **Zoom by pinching** on a trackpad or phone (or **Ctrl + mouse wheel**) over the timeline. The day under the pointer, or between your fingers, stays in place.
+- **The page stays still; the chart scrolls.** The form and toolbar stay in place, and the chart fills the rest of the window. Inside it, up/down scrolling moves the list and the timeline together; sideways (two-finger swipe, or **Shift + wheel**) moves earlier/later in time. The dates stay pinned at the top and the task list stays pinned on the left.
+- **Overview** zooms so the whole project fits the visible width and scrolls to the top; the button stays highlighted, and clicking it again takes you back to where you were. (At the furthest zoom, 2 px per day, very long projects may still need a little sideways scrolling.)
+- The chart opens scrolled to **today**, and the **Today** button jumps back to it. The chart always includes today, and has a screen's width of extra days at each end, so there's always room to scroll and zoom.
+
+### Project name
+The heading at the top is the project's name. Click it to rename it (**Enter**
+saves, **Esc** cancels). It appears at the top of printouts and images, in the
+browser tab, and in exported file names.
+
+### Print, PDF and image
+- **Print / PDF** opens the browser's print window with the whole chart on
+  A4 landscape pages: just the project's dates, every row, the project name and
+  the date it was made, always in light colours. To get a PDF, choose
+  **Save as PDF** as the printer. Very long projects are shrunk to fit the page
+  width.
+- **Save image** downloads a PNG of the same view (named after the project and
+  the date). It needs an internet connection the first time, because it loads a
+  small helper library (html-to-image) from cdnjs.
+- Collapsed groups and open subtask lists are shown as they are on screen, so
+  collapse or open them first to choose what's included.
 
 ### Saving, export and import
 - Everything is saved automatically in your browser (`localStorage`), so your chart is still there when you reopen the file in the same browser.
-- **Export JSON** downloads your tasks and group colours as `gantt.json`.
+- **Export JSON** downloads your project (name, tasks and group colours) as a `.json` file named after the project.
 - **Import JSON** loads a file you exported earlier. It replaces the current chart.
 
 Use export and import to back up your chart or move it to another browser or

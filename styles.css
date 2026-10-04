@@ -11,7 +11,15 @@
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
          background: var(--bg); color: var(--text); }
-  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+  /* The page fills the window and stays still; only the chart scrolls */
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; box-sizing: border-box;
+         height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+  main > h1, main > .panel:first-of-type { flex: none; }
+  .chart-panel { flex: 1; min-height: 320px; display: flex; flex-direction: column; margin-bottom: 0; }
+  .chart-panel .toolbar { flex: none; }
+  /* The chart is one scroll area: the list and the timeline scroll up/down together,
+     the dates stay pinned at the top and the list stays pinned on the left */
+  #chart { flex: 1; min-height: 0; overflow: auto; touch-action: pan-x pan-y; } /* a pinch zooms the chart, not the page */
   h1 { font-size: 20px; margin: 0 0 16px; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 
@@ -29,13 +37,14 @@
   .toolbar .spacer { flex: 1; }
 
   /* Chart */
-  .chart { display: grid; grid-template-columns: 220px 1fr; overflow: hidden; }
-  .labels { border-right: 1px solid var(--line); }
+  .chart { display: grid; grid-template-columns: 220px auto; width: max-content; min-width: 100%; }
+  .labels { border-right: 1px solid var(--line); position: sticky; left: 0; z-index: 5; background: var(--panel); }
+  .labels > .head { position: sticky; top: 0; z-index: 6; background: var(--panel); }
+  .track > .head { position: sticky; top: 0; z-index: 4; background: var(--panel); }
   .labels .row, .labels .head { padding: 0 8px; display: flex; align-items: center; gap: 6px; }
   .labels .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .labels .row button { padding: 0 6px; border: none; background: none; color: var(--muted); }
   .labels .row button:hover { color: var(--text); }
-  .timeline { overflow-x: auto; }
   .track { position: relative; }
   .head { height: 76px; border-bottom: 1px solid var(--line); }
   .row { height: 36px; border-bottom: 1px solid var(--line); }
@@ -46,7 +55,7 @@
      month/week label is a block as wide as its period; the text inside sticks to
      the left edge while scrolling (overflow: clip keeps it inside its block). */
   .hspan { position: absolute; height: 16px; line-height: 16px; font-size: 11px; white-space: nowrap; overflow: clip; }
-  .hspan > span { position: sticky; left: 0; display: inline-block; padding: 0 4px; }
+  .hspan > span { position: sticky; left: 220px; display: inline-block; padding: 0 4px; } /* pinned just right of the task list (LABELS_W) */
   .hspan.quarter { top: 3px; font-weight: 700; border-left: 2px solid var(--text); }
   .hspan.month { top: 20px; font-weight: 600; border-left: 1px solid var(--line); }
   .hspan.week { top: 37px; color: var(--muted); border-left: 1px solid var(--line); }
@@ -239,3 +248,42 @@
   .compact .day.month-start { border-left-color: color-mix(in srgb, var(--muted) 60%, var(--line)); }
   /* ...and bars lose their padding so short tasks keep their true length */
   .compact .bar, .compact .bar.ms-start, .compact .bar.ms-end { padding: 0 2px; }
+
+  /* Day numbers in the pinned header keep the grid look: a line per day, weekends shaded */
+  .day-label { border-left: 1px solid var(--line); box-sizing: border-box; height: 20px; }
+  .day-label.weekend { background: var(--weekend); }
+
+  /* Overview button while the overview is showing */
+  #overviewBtn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Project name: click to rename */
+  #projectName { border-radius: 4px; padding: 0 4px; margin-left: -4px; outline: none; cursor: text; }
+  #projectName:hover { background: var(--weekend); }
+  #projectName:focus { background: var(--panel); box-shadow: 0 0 0 2px var(--accent); }
+
+  /* ---- The copy of the chart used for printing and images ---- */
+  #exportArea { display: none; }
+  /* Always light, whatever the screen's theme */
+  .export { --bg: #ffffff; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --line: #e4e4e0;
+            --accent: #3b6fd8; --today: #d94a3b; --weekend: #f0f0ec;
+            color-scheme: light; background: #fff; color: var(--text); width: max-content; padding: 16px; }
+  .export-title h1 { font-size: 20px; margin: 0; }
+  .export-title p { margin: 2px 0 12px; color: var(--muted); font-size: 12px; }
+  .export .chart { min-width: 0; border: 1px solid var(--line); }
+  /* Nothing scrolls in the copy, so nothing needs pinning */
+  .export .labels, .export .labels > .head, .export .track > .head, .export .hspan > span { position: static; }
+  .export .track > .head { position: relative; }
+  /* Leave out the editing controls and the "drag here" row */
+  .export .row.add-row, .export .sub-add-btn, .export .labels button[onclick], .export .sub-remove,
+  .export .link-dot, .export .ghost-bar { display: none !important; }
+  /* Off-screen while the image is being made */
+  #exportArea.capturing { display: block; position: fixed; left: -100000px; top: 0; }
+
+  @media print {
+    @page { size: A4 landscape; margin: 10mm; }
+    html, body { background: #fff; }
+    body > :not(#exportArea) { display: none !important; }
+    #exportArea { display: block; padding: 0; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } /* keep the colours */
+    .export .row { break-inside: avoid; }
+  }

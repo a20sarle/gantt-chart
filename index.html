@@ -8,7 +8,8 @@
 </head>
 <body>
 <main>
-  <h1>Simple Gantt</h1>
+  <!-- The project name: click to rename. It heads printouts and images. -->
+  <h1 id="projectName" contenteditable="plaintext-only" spellcheck="false" title="Click to rename the project"></h1>
 
   <section class="panel">
     <form id="taskForm">
@@ -30,7 +31,7 @@
     <div class="error" id="error"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel chart-panel">
     <div class="toolbar">
       <!-- Day / Week / Month set the day width to a preset; the slider fine-tunes it -->
       <div class="seg" id="viewBtns" role="group" aria-label="View">
@@ -39,11 +40,14 @@
         <button data-view="month">Month</button>
       </div>
       <label style="flex-direction:row;align-items:center">Day width
-        <input id="zoom" type="range" min="2" max="60" value="28">
+        <input id="zoom" type="range" min="2" max="60" step="any" value="28">
       </label>
       <button id="todayBtn" title="Scroll to today">Today</button>
+      <button id="overviewBtn" title="Fit the whole project in view (click again to go back)">Overview</button>
       <button id="collapseAllBtn" hidden>Collapse all</button>
       <span class="spacer"></span>
+      <button id="printBtn" title="Print the whole chart, or save it as a PDF from the print window">Print / PDF</button>
+      <button id="imageBtn" title="Download a picture (PNG) of the whole chart">Save image</button>
       <button id="exportBtn">Export JSON</button>
       <button id="importBtn">Import JSON</button>
       <button id="clearBtn">Clear all</button>
@@ -89,6 +93,9 @@
     </div>
   </form>
 </dialog>
+
+<!-- Filled with a copy of the whole chart just before printing or saving an image -->
+<div id="exportArea" class="export"></div>
 
 <script src="app.js"></script>
 </body>
