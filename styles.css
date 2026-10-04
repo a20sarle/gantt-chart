@@ -279,3 +279,15 @@
   /* Off-screen while the image is being made */
   #exportArea.capturing { display: block; position: fixed; left: -100000px; top: 0; }
 
+
+  /* A name being renamed in place */
+  .renaming { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; cursor: text;
+              background: var(--panel); color: var(--text); padding: 0 3px; user-select: text; }
+  /* A name only takes the room its text needs (the rest of a task row can be
+     dragged); the space after it pushes the row's buttons to the right */
+  .labels .row .name { flex: 0 1 auto; margin-right: auto; cursor: text; }
+  .labels .row .name.renaming { min-width: 60px; }
+
+  /* While dragged, a row or bar lets the pointer "see through" it, so the app can
+     tell which group is underneath (the dragged item follows the pointer) */
+  .labels .row.dragging, .bar.dragging { pointer-events: none; }

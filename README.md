@@ -16,7 +16,8 @@ Remove them with **Clear all**.
 
 ### Tasks
 - **Add a task:** enter a name, an optional group, a start date and an end date, then click **Add task**. Or drag across empty days in the chart (see *Creating a task by dragging*).
-- **Edit a task:** click its bar in the chart or its name in the list, change the details, then click **Save**.
+- **Rename** a task, subtask or group: click its name in the list, type, and press **Enter** (or click elsewhere, or straight on the next name); **Esc** cancels. Renaming a group to the name of another group merges them.
+- **Edit a task's dates, group or milestone:** double-click its bar in the chart or its row in the list, change the details, then click **Save**.
 - **Delete a task:** click ✕ in the list.
 - A task's end date is included, so a task from the 3rd to the 5th lasts 3 days.
 

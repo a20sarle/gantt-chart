@@ -663,6 +663,100 @@ chartEl.addEventListener('focusout', e => {
   if (e.target.matches('.sub-new')) finishAddingSubtask(e.target, { keep: true, next: false });
 });
 
+// ---- Renaming in place (in the list) ----
+// Press on a name in the list (group, task or subtask) to rename it: Enter or
+// clicking elsewhere saves, Esc cancels. Pressing another name saves the one
+// being edited and moves straight on to the new one.
+// Double-click a task's row or bar to open the form for dates, group and milestone.
+let renaming = null; // { el, current, onSave, startedAt }
+
+// Which item a name element belongs to, so it can be found again after a redraw
+function nameKey(el) {
+  if (el.dataset.renameGroup) return { group: el.dataset.renameGroup };
+  if (el.dataset.sub) return { task: el.dataset.task, sub: el.dataset.sub };
+  return { task: el.closest('.task-row')?.dataset.id };
+}
+function findName(key) {
+  return [...chartEl.querySelectorAll('.labels .name')].find(el => {
+    const k = nameKey(el);
+    return key.group ? k.group === key.group : key.sub ? k.sub === key.sub : !k.sub && !k.group && k.task === key.task;
+  });
+}
+
+function startRename(key) {
+  const el = findName(key);
+  if (!el) return;
+  let current, onSave;
+  if (key.group) {
+    current = key.group;
+    onSave = name => renameGroup(key.group, name); // redraws: the group's name is used everywhere
+  } else if (key.sub) {
+    const sub = tasks.find(t => t.id === key.task).subtasks.find(s => s.id === key.sub);
+    current = sub.name;
+    onSave = name => { sub.name = name; save(); el.textContent = name; };
+  } else {
+    const t = tasks.find(t => t.id === key.task);
+    current = t.name;
+    onSave = name => { // update the list and the bar in place (no redraw, so the next click isn't lost)
+      t.name = name; save(); el.textContent = name;
+      const label = chartEl.querySelector(`.bar[data-id="${t.id}"] .label`);
+      if (label) label.textContent = name + ((t.subtasks || []).length ? ` · ${progressOf(t)}%` : '');
+    };
+  }
+  renaming = { el, current, onSave, startedAt: Date.now() };
+  try { el.contentEditable = 'plaintext-only'; } catch { el.contentEditable = 'true'; } // older browsers
+  el.classList.add('renaming');
+  el.focus();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  getSelection().removeAllRanges(); getSelection().addRange(range);
+}
+
+function finishRename(keep) {
+  if (!renaming) return;
+  const { el, current, onSave } = renaming;
+  renaming = null;
+  const name = el.textContent.trim().replace(/\s+/g, ' ');
+  el.removeAttribute('contenteditable');
+  el.classList.remove('renaming');
+  if (keep && name && name !== current) onSave(name);
+  else el.textContent = current;
+}
+
+chartEl.addEventListener('keydown', e => {
+  if (!renaming || e.target !== renaming.el) return;
+  if (e.key === 'Enter') { e.preventDefault(); finishRename(true); }
+  if (e.key === 'Escape') { e.stopPropagation(); finishRename(false); }
+});
+chartEl.addEventListener('focusout', e => {
+  if (renaming && e.target === renaming.el) finishRename(true);
+});
+
+// Renames a group for all its tasks, keeping its colour, collapsed state and
+// place. Renaming it to another group's name merges the two.
+function renameGroup(oldName, newName) {
+  const merging = tasks.some(t => t.group === newName);
+  tasks.forEach(t => { if (t.group === oldName) t.group = newName; });
+  if (!merging && groupColors && oldName in groupColors) groupColors[newName] = groupColors[oldName];
+  if (groupColors) delete groupColors[oldName];
+  if (collapsed.delete(oldName) && !merging) collapsed.add(newName);
+  saveCollapsed();
+  groupOrder = groupOrder.map(g => g === oldName ? newName : g);
+  save(); render();
+}
+
+chartEl.addEventListener('dblclick', () => {
+  const owner = lastPressed?.closest('.bar, .labels .task-row');
+  if (!owner) return;
+  // Clicking inside a name you're already editing (e.g. to place the cursor)
+  // is just editing. Only a quick double-click, whose first click started the
+  // editing a moment ago, opens the form.
+  if (lastPressed.closest('.renaming') && Date.now() - renaming.startedAt > 450) return;
+  finishRename(false);
+  getSelection().removeAllRanges();
+  startEdit(owner.dataset.id);
+});
+
 // ---- Group order (persisted) ----
 // Groups are shown by their earliest start date. Groups that start on the same
 // day keep the order they had before, so this remembers the last order shown.
@@ -826,8 +920,18 @@ function autoScroll() {
   requestAnimationFrame(autoScroll);
 }
 
+let lastPressed = null; // what the last press was on (double-clicks are read from it)
 chartEl.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || e.target.closest('button, input')) return;
+  lastPressed = e.target;
+  if (e.button !== 0 || e.target.closest('button, input, .renaming')) return;
+  const name = e.target.closest('.labels .name');
+  if (name) {
+    e.preventDefault(); // keep focus where it is; we switch the editing over ourselves
+    const key = nameKey(name);
+    finishRename(true);  // save the name being edited, if any (a group rename redraws the list)
+    startRename(key);
+    return;
+  }
   const dot = e.target.closest('.link-dot');            // drag from it onto another bar to link them
   const bar = !dot && e.target.closest('.bar');
   const groupBar = e.target.closest('.group-bar');
@@ -875,7 +979,7 @@ function endDrag() {
 chartEl.addEventListener('pointerup', () => {
   if (!drag) return;
   const d = endDrag();
-  if (!d.moved) return d.task && d.kind !== 'link' ? startEdit(d.task.id) : undefined;
+  if (!d.moved) return; // a click without dragging: nothing (double-click opens the form)
 
   if (d.kind === 'task' || d.kind === 'regroup') {
     const regroupTo = newGroupOf(d);
@@ -1099,7 +1203,7 @@ function render() {
       }).join('');
       labels += `<div class="row group-row ghead" ${rowGroup} style="${colorVars}">
           <button class="toggle" data-toggle="${esc(g)}" title="${isCollapsed ? 'Expand' : 'Collapse'} group">${isCollapsed ? '▸' : '▾'}</button>
-          <span>${esc(groupLabel(g))}</span>
+          <span${g ? ` class="name" data-rename-group="${esc(g)}" title="Click to rename the group"` : ''}>${esc(groupLabel(g))}</span>
           ${isCollapsed ? `<small class="count">${list.length} task${list.length > 1 ? 's' : ''}</small>` : ''}
         </div>`;
       rows += `<div class="row ghead" ${rowGroup} style="position:relative;${colorVars}">
@@ -1124,7 +1228,7 @@ function render() {
 
       labels += `
         <div class="row task-row${grouped}${done}" data-id="${t.id}" ${rowGroup} style="${colorVars}"
-             title="${showHeaders ? 'Drag onto another group to move it there, click to edit' : 'Click to edit'}">
+             title="Click the name to rename, double-click the row to edit dates and more${showHeaders ? ', drag onto another group to move it there' : ''}">
           ${subs.length
             // With subtasks: a thick two-tone ring that fills up with the progress.
             // Clicking it opens/closes the subtask list.
@@ -1134,7 +1238,7 @@ function render() {
             : `<button class="status${t.done ? ' checked' : ''}" data-task="${t.id}" aria-pressed="${!!t.done}"
                        title="${t.done ? 'Done. Click to mark as not done' : 'Click to mark as done'}">${t.done ? '✓' : ''}</button>`}
           ${t.milestone ? `<i class="ms-icon" title="Milestone at ${t.milestone}"></i>` : ''}
-          <span>${esc(t.name)}</span>
+          <span class="name">${esc(t.name)}</span>
           ${subs.length ? `<small class="sub-count" title="Subtasks done">${doneSubs}/${subs.length}</small>` : ''}
           <button class="sub-add-btn" data-task="${t.id}" title="Add subtask">+</button>
           <button onclick="removeTask('${t.id}')" title="Delete">✕</button>
@@ -1142,7 +1246,7 @@ function render() {
 
       rows += `<div class="row${grouped}" ${rowGroup} style="position:relative;height:${rowH}px;${colorVars}">
         <div class="bar${t.milestone ? ' ms-' + t.milestone : ''}${done}${open ? ' tall' : ''}" data-id="${t.id}" data-group="${esc(g)}" style="left:${left}px;width:${len * dayW}px;top:7px;height:${rowH - 14}px"
-             title="${esc(t.name)}: ${t.start} → ${t.end} (${len} day${len > 1 ? 's' : ''})${subs.length ? ` · ${pct}% done` : ''}${t.milestone ? `\nMilestone at ${t.milestone}` : ''}\nDrag to move (up/down to change group), drag edges to resize, click to edit"
+             title="${esc(t.name)}: ${t.start} → ${t.end} (${len} day${len > 1 ? 's' : ''})${subs.length ? ` · ${pct}% done` : ''}${t.milestone ? `\nMilestone at ${t.milestone}` : ''}\nDouble-click to edit dates and more\nDrag to move (up/down to change group), drag edges to resize"
           ><span class="progress" style="width:${pct}%"></span><span class="handle" data-edge="start"></span><span class="label">${esc(t.name)}${subs.length ? ` · ${pct}%` : ''}</span><span class="handle" data-edge="end"></span>${t.milestone ? '<i class="diamond"></i>' : ''}<span class="link-dot" title="Drag onto another task: it can only start after this one has finished"></span></div>
       </div>`;
 
@@ -1152,7 +1256,7 @@ function render() {
         for (const s of subs) {
           labels += `<div class="row sub-row${grouped}" ${rowGroup} style="${colorVars}">
             <input type="checkbox" class="sub-done" data-task="${t.id}" data-sub="${s.id}" ${s.done ? 'checked' : ''}>
-            <span class="${s.done ? 'sub-checked' : ''}">${esc(s.name)}</span>
+            <span class="name${s.done ? ' sub-checked' : ''}" data-task="${t.id}" data-sub="${s.id}" title="Click to rename">${esc(s.name)}</span>
             <button class="sub-remove" data-task="${t.id}" data-sub="${s.id}" title="Delete subtask">✕</button>
           </div>`;
         }
