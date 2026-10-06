@@ -29,9 +29,11 @@ while you **hover** the row; on a phone or tablet, after you **tap** the row
 links is always shown. Hidden buttons can't be clicked by accident.
 
 ### On a phone
-The layout adapts to narrow screens: the form folds away behind **+ New task**
-(it also opens when you edit a task), the view buttons form a 2 × 4 grid, and
-the task list is narrower so the chart gets more room.
+On narrow screens the app adapts:
+
+- It opens on a **Schedule**: you scroll **down** through time. Each week is a heading ("Week 41 · 5–11 Oct"), starting at this week, which also lists tasks still running from earlier weeks. Each task is a card with its colour, status circle, name, dates, group, subtask count and 📎. Tap a card to open it: tick off subtasks, open its links, or tap **Edit** for dates, group and milestone.
+- **Schedule | Chart** at the top switches to the Gantt chart. On a phone the chart hides the task list so the timeline gets the full width (names are on the bars, group names on the group rows); **☰ List** shows the list again.
+- The form folds away behind **+ New task** (it also opens when you edit a task).
 
 ### Dragging in the chart
 | Where you grab the bar | What changes |

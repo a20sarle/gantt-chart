@@ -407,7 +407,9 @@ function scrollToToday() {
   chartEl.scrollLeft = Math.max(0, x - (chartEl.clientWidth - labelsW()) / 4);
 }
 // Today: today's period in Day / Week / Month / Quarter, otherwise scroll to today
-document.getElementById('todayBtn').onclick = () => view ? openView(view, todayString()) : scrollToToday();
+document.getElementById('todayBtn').onclick = () =>
+  document.documentElement.classList.contains('phone-schedule') ? scrollScheduleToThisWeek()
+  : view ? openView(view, todayString()) : scrollToToday();
 
 // Overview: zoom so the whole project (first start to last end, plus a day on
 // each side) fits the visible width, and scroll to the top. Clicking again goes
@@ -447,13 +449,18 @@ function buildExport(targetW) {
   const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
   const days = daysBetween(first, last) + 3;
   const keep = { leftDay: dayNumber(chartStart) + chartEl.scrollLeft / renderedDayW, top: chartEl.scrollTop };
+  // The image always shows the normal chart with its list, also on a phone
+  const phoneClasses = ['phone-schedule', 'phone-chart', 'list-hidden'].filter(c => document.documentElement.classList.contains(c));
+  document.documentElement.classList.remove(...phoneClasses);
   // Draw the chart at the export size, copy it, then draw the normal view again
   // (all in one go, so the screen never shows the export version)
   const dayW = Math.min(28, Math.max(2, (targetW - labelsW()) / days));
+  const listW = labelsW(); // the copy keeps this list width, whatever the screen does later
   exportOpts = { dayW, first, last };
   render();
   const chart = chartEl.querySelector('.chart').cloneNode(true);
   exportOpts = null;
+  document.documentElement.classList.add(...phoneClasses);
   render();
   chartEl.scrollLeft = (keep.leftDay - dayNumber(chartStart)) * renderedDayW;
   chartEl.scrollTop = keep.top;
@@ -463,6 +470,7 @@ function buildExport(targetW) {
   area.innerHTML = `<header class="export-title"><h1>${esc(projectName)}</h1>
     <p>Made ${longDate(Date.now())} · ${longDate(first)} – ${longDate(last)}</p></header>`;
   area.appendChild(chart);
+  area.style.setProperty('--labels-w', listW + 'px');
   return area;
 }
 
@@ -588,6 +596,123 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !exportMenu.hidden) { showExportMenu(false); exportMenuBtn.focus(); }
+});
+
+// ---- Phones: Schedule view, and the chart without its list ----
+// On narrow screens the app opens on a Schedule: weeks as headings and each
+// task as a card, scrolled downwards through time (like Google Calendar's
+// Schedule view). "Chart" switches to the Gantt chart, where the task list is
+// hidden so the chart gets the full width ("☰ List" shows it again).
+// The choices are remembered. Classes on <html> switch the layout (styles.css).
+const PHONE_VIEW_KEY = 'simple-gantt-phone-view';
+const phoneQuery = matchMedia('(max-width: 640px)');
+let phoneView = (() => { try { return localStorage.getItem(PHONE_VIEW_KEY) === 'chart' ? 'chart' : 'schedule'; } catch { return 'schedule'; } })();
+let phoneListShown = false;
+const scheduleOpen = new Set(); // cards opened to show their details
+
+function applyPhoneLayout() {
+  const phone = phoneQuery.matches, root = document.documentElement;
+  root.classList.toggle('phone-schedule', phone && phoneView === 'schedule');
+  root.classList.toggle('phone-chart', phone && phoneView === 'chart');
+  root.classList.toggle('list-hidden', phone && phoneView === 'chart' && !phoneListShown);
+  for (const b of document.querySelectorAll('#phoneViewBtns [data-phone]')) b.classList.toggle('active', b.dataset.phone === phoneView);
+  document.getElementById('listBtn').classList.toggle('active', phoneListShown);
+}
+function setPhoneView(v) {
+  phoneView = v;
+  try { localStorage.setItem(PHONE_VIEW_KEY, v); } catch {}
+  applyPhoneLayout();
+  render();
+  if (v === 'schedule') scrollScheduleToThisWeek(); else scrollToToday();
+}
+document.getElementById('phoneViewBtns').onclick = e => {
+  const b = e.target.closest('[data-phone]');
+  if (b) setPhoneView(b.dataset.phone);
+};
+document.getElementById('listBtn').onclick = () => { phoneListShown = !phoneListShown; applyPhoneLayout(); render(); };
+phoneQuery.addEventListener('change', () => { applyPhoneLayout(); render(); });
+
+const scheduleEl = document.getElementById('schedule');
+const weekStartOf = s => fmt(new Date(+parse(s) - ((parse(s).getUTCDay() || 7) - 1) * DAY));
+const shortRange = (a, b) => {
+  const o = { day: 'numeric', month: 'short', timeZone: 'UTC' };
+  if (a === b) return parse(a).toLocaleDateString(undefined, o);
+  const sameMonth = a.slice(0, 7) === b.slice(0, 7);
+  return `${sameMonth ? parse(a).getUTCDate() : parse(a).toLocaleDateString(undefined, o)}–${parse(b).toLocaleDateString(undefined, o)}`;
+};
+
+function renderSchedule() {
+  if (!document.documentElement.classList.contains('phone-schedule')) return;
+  const today = todayString(), thisWeek = weekStartOf(today);
+  syncGroupColors();
+  const colour = g => g ? PALETTE[groupColors[g]] || UNGROUPED_COLOR : UNGROUPED_COLOR;
+  const sorted = [...tasks].sort((a, b) => a.start.localeCompare(b.start));
+  // Each task is listed in the week it starts; tasks still running from earlier
+  // weeks are also listed at the top of this week.
+  const weeks = new Map();
+  const add = (w, t, ongoing) => { if (!weeks.has(w)) weeks.set(w, []); weeks.get(w).push({ t, ongoing }); };
+  for (const t of sorted) {
+    if (t.start < thisWeek && t.end >= thisWeek) add(thisWeek, t, true);
+    add(weekStartOf(t.start), t, false);
+  }
+  if (!weeks.has(thisWeek)) weeks.set(thisWeek, []);
+
+  const card = ({ t, ongoing }) => {
+    const c = colour(t.group), subs = t.subtasks || [], pct = progressOf(t), open = scheduleOpen.has(t.id);
+    const links = t.links || [];
+    const status = subs.length
+      ? `<button class="status ring" style="--pct:${pct}" data-task="${t.id}" title="${pct}% done"></button>`
+      : `<button class="status${t.done ? ' checked' : ''}" data-task="${t.id}" title="${t.done ? 'Done' : 'Mark as done'}">${t.done ? '✓' : ''}</button>`;
+    const meta = [
+      ongoing ? `since ${shortRange(t.start, t.start)}, until ${shortRange(t.end, t.end)}` : shortRange(t.start, t.end),
+      t.group || '', subs.length ? `${subs.filter(s => s.done).length}/${subs.length}` : '',
+      links.length ? `📎${links.length > 1 ? links.length : ''}` : '',
+    ].filter(Boolean).join(' · ');
+    const details = !open ? '' : `<div class="sched-details">
+      ${subs.map(s => `<label class="sched-sub"><input type="checkbox" class="sub-done" data-task="${t.id}" data-sub="${s.id}" ${s.done ? 'checked' : ''}>
+        <span class="${s.done ? 'sub-checked' : ''}">${esc(s.name)}</span>
+        ${(s.links || []).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">📎 ${esc(linkLabel(l.url))}</a>`).join('')}</label>`).join('')}
+      ${links.map(l => `<a class="sched-link" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">📎 ${esc(linkLabel(l.url))}</a>`).join('')}
+      <button class="sched-edit" data-task="${t.id}">Edit dates, group and more</button>
+    </div>`;
+    return `<article class="sched-card${pct === 100 ? ' done' : ''}${open ? ' open' : ''}" data-id="${t.id}" style="--bar:${c.bg}">
+      <div class="sched-main">${status}
+        <div class="sched-text"><div class="sched-name">${t.milestone ? '<i class="ms-icon"></i>' : ''}${esc(t.name)}</div>
+        <div class="sched-meta">${esc(meta)}</div></div></div>${details}</article>`;
+  };
+
+  scheduleEl.innerHTML = [...weeks.keys()].sort().map(w => {
+    const end = fmt(new Date(+parse(w) + 6 * DAY));
+    return `<section class="sched-week${w === thisWeek ? ' current' : ''}" data-week="${w}">
+      <h3>Week ${isoWeek(parse(w))} · ${shortRange(w, end)}${w === thisWeek ? ' · This week' : ''}</h3>
+      ${weeks.get(w).map(card).join('') || '<p class="sched-empty">Nothing starts this week.</p>'}
+    </section>`;
+  }).join('') || '<p class="sched-empty">No tasks yet. Tap “+ New task” to add one.</p>';
+}
+
+document.getElementById('schedTodayBtn').onclick = () => scrollScheduleToThisWeek();
+function scrollScheduleToThisWeek() {
+  const cur = scheduleEl.querySelector('.sched-week.current');
+  if (cur) scheduleEl.scrollTop = cur.offsetTop - scheduleEl.offsetTop;
+}
+
+scheduleEl.addEventListener('click', e => {
+  if (e.target.closest('a, input, label')) return; // links open, tick boxes tick
+  const status = e.target.closest('button.status');
+  const edit = e.target.closest('.sched-edit');
+  const cardEl = e.target.closest('.sched-card');
+  if (!cardEl) return;
+  const t = tasks.find(t => t.id === cardEl.dataset.id);
+  if (edit) return startEdit(t.id);
+  if (status && !status.classList.contains('ring')) { t.done = !t.done; save(); render(); return; }
+  scheduleOpen.has(t.id) ? scheduleOpen.delete(t.id) : scheduleOpen.add(t.id); // tap a card (or its ring): details
+  renderSchedule();
+});
+scheduleEl.addEventListener('change', e => {
+  if (!e.target.matches('.sub-done')) return;
+  const t = tasks.find(t => t.id === e.target.dataset.task);
+  t.subtasks.find(s => s.id === e.target.dataset.sub).done = e.target.checked;
+  save(); render();
 });
 
 // ---- "Coming up" notice ----
@@ -1085,7 +1210,10 @@ let displayedGroups = [];           // group names in the order last shown
 
 const ROW_H = 36;     // height of one row in the list and the chart (matches styles.css)
 // Width of the list column, from styles.css (--labels-w; narrower on phones)
-const labelsW = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--labels-w')) || 220;
+const labelsW = () => {
+  const w = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--labels-w'));
+  return Number.isNaN(w) ? 220 : w; // 0 is a real width (the list hidden on a phone)
+};
 const HEAD_H = 77;    // height of the date header incl. its border (matches .head in styles.css)
 const timelineEl = () => chartEl.querySelector('.timeline');
 const dayNumber = d => Math.round(d / DAY);
@@ -1523,6 +1651,7 @@ function render() {
       rows += `<div class="row ghead" ${rowGroup} style="position:relative;${colorVars}">
         <div class="group-bar" data-group="${esc(g)}" style="left:${gLeft}px;width:${gLen * dayW}px"
              title="${esc(groupLabel(g))}: ${gStart} → ${gEnd}\nDrag to move the whole group"></div>${diamonds}
+        <span class="gname-on-chart" data-group="${esc(g)}" style="margin-left:${gLeft}px">${esc(groupLabel(g))}</span>
       </div>`;
     }
     if (isCollapsed) continue;
@@ -1610,6 +1739,7 @@ function render() {
   applyDragVisual(); // re-apply an in-progress drag to the fresh elements
   if (!drag || !drag.moved) drawLinks();
   tidyHeaderLabels();
+  renderSchedule();
 }
 
 // A quarter/month/week label that is being pushed out of view (its period is
@@ -1709,4 +1839,7 @@ render();
   if (['day', 'week', 'month', 'quarter'].includes(v)) openView(v, todayString());
   else scrollToToday();
 })();
+applyPhoneLayout();
+render();
+scrollScheduleToThisWeek();
 checkComingUp();

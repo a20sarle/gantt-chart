@@ -6,7 +6,7 @@
 <title>Simple Gantt</title>
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever styles.css or app.js changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-06.6">
+<link rel="stylesheet" href="styles.css?v=2026-10-06.9">
 </head>
 <body>
 <main>
@@ -49,6 +49,13 @@
         <button id="nextBtn" title="Next" aria-label="Next">›</button>
         <button id="overviewBtn" title="Fit the whole project in view (click again to go back)">Overview</button>
       </div>
+      <!-- Phones only: Schedule (a list by week) or the Gantt chart, and showing the task list -->
+      <div class="seg phone-only" id="phoneViewBtns" role="group" aria-label="Phone view">
+        <button data-phone="schedule">Schedule</button>
+        <button data-phone="chart">Chart</button>
+      </div>
+      <button id="listBtn" class="phone-only" title="Show or hide the task list">☰ List</button>
+      <button id="schedTodayBtn" class="phone-only" title="Go to this week">Today</button>
       <button id="collapseAllBtn" hidden>Collapse all</button>
       <span class="spacer"></span>
       <!-- Saving and loading, as one joined group: an Export menu and Import -->
@@ -67,6 +74,8 @@
       <input id="importFile" type="file" accept="application/json" hidden>
     </div>
     <div id="chart"></div>
+    <!-- Phones: tasks as a list by week, scrolled downwards (filled by app.js) -->
+    <div id="schedule"></div>
   </section>
 </main>
 
@@ -124,6 +133,6 @@
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-06.4"></script>
+<script src="app.js?v=2026-10-06.9"></script>
 </body>
 </html>

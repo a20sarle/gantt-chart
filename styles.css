@@ -380,3 +380,47 @@
     /* While renaming, the name gets the whole row */
     .labels .row:has(.renaming) .reveal, .labels .row:has(.renaming) .sub-count { display: none; }
   }
+
+  /* ---- Phones: Schedule view and the chart without its list ---- */
+  .phone-only, #schedule, .gname-on-chart { display: none; }
+  @media (max-width: 640px) {
+    .phone-only { display: inline-flex; }
+    html:not(.phone-chart) #listBtn { display: none; }
+    /* Schedule: the chart and its view buttons step aside */
+    html.phone-schedule #chart, html.phone-schedule #viewBtns, html.phone-schedule #collapseAllBtn { display: none !important; }
+    html:not(.phone-schedule) #schedTodayBtn { display: none; }
+    html.phone-schedule #schedule { display: block; flex: 1; min-height: 0; overflow-y: auto; }
+    /* Chart with the list hidden: the timeline gets the whole width */
+    html.list-hidden { --labels-w: 0px; }
+    html.list-hidden #chart .labels { visibility: hidden; overflow: hidden; border: 0; }
+    /* Group names on the chart's group rows; they stay at the left edge while the group scrolls past */
+    html.list-hidden #chart .gname-on-chart { display: inline-block; position: sticky; left: 4px; top: 0; padding-top: 1px;
+                                       font-size: 11px; font-weight: 700; color: var(--bar); white-space: nowrap;
+                                       pointer-events: none; z-index: 2; }
+    html.list-hidden #chart .group-bar { top: 18px; height: 6px; }
+  }
+  #schedule h3 { position: sticky; top: 0; z-index: 2; margin: 0; padding: 10px 2px 6px; font-size: 13px;
+                 background: var(--panel); color: var(--muted); }
+  #schedule .sched-week.current h3 { color: var(--accent); }
+  .sched-card { display: block; margin: 0 0 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+                border-left: 5px solid var(--bar); background: color-mix(in srgb, var(--bar) 8%, var(--panel)); cursor: pointer; }
+  .sched-card.done { opacity: .55; filter: grayscale(1); }
+  .sched-main { display: flex; align-items: center; gap: 10px; }
+  .sched-card .status { --ring: var(--bar); flex: none; width: 20px; height: 20px; padding: 0; border: 2px solid var(--ring);
+                        border-radius: 50%; background: #fff; color: #fff; font-size: 12px; font-weight: 800; line-height: 16px; }
+  .sched-card .status.checked { background: var(--ring); }
+  .sched-card .status.ring { position: relative; border: none;
+                             background: conic-gradient(var(--ring) calc(var(--pct) * 1%), color-mix(in srgb, var(--ring) 55%, #fff) 0); }
+  .sched-card .status.ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #fff; }
+  .sched-text { min-width: 0; flex: 1; }
+  .sched-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sched-name .ms-icon { background: var(--bar); }
+  .sched-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .sched-details { margin: 10px 0 0 30px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+  .sched-sub { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; flex-wrap: wrap; }
+  .sched-sub input { accent-color: var(--bar); }
+  .sched-sub .sub-checked { text-decoration: line-through; opacity: .6; }
+  .sched-sub a, .sched-link { color: var(--accent); font-size: 13px; }
+  .sched-edit { align-self: flex-start; margin-top: 4px; font-size: 13px; padding: 6px 10px; }
+  .sched-empty { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
