@@ -11,24 +11,21 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: var(--bg); color: var(--text); }
+         background: var(--panel); color: var(--text); } /* one plain page, no cards */
   /* The page fills the window and stays still; only the chart scrolls */
   main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; box-sizing: border-box;
          height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
-  main > h1, main > .panel:first-of-type { flex: none; }
   .chart-panel { flex: 1; min-height: 320px; display: flex; flex-direction: column; margin-bottom: 0; }
   .chart-panel .toolbar { flex: none; }
   /* The chart is one scroll area: the list and the timeline scroll up/down together,
      the dates stay pinned at the top and the list stays pinned on the left */
   #chart { flex: 1; min-height: 0; overflow: auto; touch-action: pan-x pan-y; } /* a pinch zooms the chart, not the page */
   h1 { font-size: 20px; margin: 0 0 16px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 
   form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
   input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
           background: var(--bg); color: var(--text); }
-  input[name=name] { min-width: 220px; }
   button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line);
            background: var(--panel); color: var(--text); cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -40,7 +37,7 @@
   /* Chart */
   .chart { display: grid; grid-template-columns: var(--labels-w) auto; width: max-content; min-width: 100%; }
   .labels { border-right: 1px solid var(--line); position: sticky; left: 0; z-index: 5; background: var(--panel); }
-  .labels > .head { position: sticky; top: 0; z-index: 6; background: var(--panel); }
+  .labels > .head { position: sticky; top: 0; z-index: 6; background: var(--panel); justify-content: center; }
   .track > .head { position: sticky; top: 0; z-index: 4; background: var(--panel); }
   .labels .row, .labels .head { padding: 0 8px; display: flex; align-items: center; gap: 6px; }
   .labels .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -302,6 +299,18 @@
   .seg .menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px; }
   .seg .menu button:hover, .seg .menu button:focus-visible { background: var(--weekend); outline: none; }
 
+  /* View controls: ‹ [Week ▾] › (in the chart's top-left corner on a computer) */
+  .view-nav { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+  .view-nav .nav-arrow { border-color: transparent; background: none; font-size: 18px; line-height: 1; padding: 4px 9px; border-radius: 50%; }
+  .view-nav .nav-arrow:hover { background: var(--weekend); }
+  #viewMenuBtn { min-width: 104px; } /* the same width for every view, so the arrows stay put */
+  .view-menu { min-width: 150px; }
+  .view-menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px 8px 30px; position: relative; }
+  .view-menu button:hover, .view-menu button:focus-visible { background: var(--weekend); outline: none; }
+  .view-menu button.active { font-weight: 600; }
+  .view-menu button.active::before { content: "✓"; position: absolute; left: 11px; color: var(--accent); }
+  .view-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 6px; }
+
   /* "Coming up" notice, bottom right */
   .notice { position: fixed; right: 16px; bottom: 16px; z-index: 30; width: min(340px, calc(100vw - 32px));
             background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
@@ -340,34 +349,19 @@
   .labels .row.selected .reveal, .labels .row .reveal:focus-visible, .labels .row .link-btn.has-links { visibility: visible; }
   .labels .row.selected { box-shadow: inset 3px 0 0 var(--bar); }
 
-  /* "+ New task" only exists on phones (see below) */
-  .new-task-btn { display: none; }
 
   /* ---- Phones ---- */
   @media (max-width: 640px) {
     :root { --labels-w: 150px; }
     main { padding: 12px 8px; }
     h1 { font-size: 18px; margin-bottom: 10px; }
-    .panel { padding: 10px; margin-bottom: 10px; }
-    /* The form folds away behind "+ New task" */
-    .new-task-btn { display: block; width: 100%; }
-    .form-panel.open .new-task-btn { width: auto; margin-bottom: 10px; background: var(--panel); color: var(--text); border-color: var(--line); }
-    .form-panel:not(.open) #taskForm, .form-panel:not(.open) .error { display: none; }
-    input[name=name] { min-width: 0; width: 100%; }
-    #taskForm label { flex: 1 1 140px; }
-    #taskForm input, #taskForm select { width: 100%; }
-    /* View buttons as a joined 2 x 4 grid: Day Week Month Quarter / ‹ Today › Overview */
-    #viewBtns { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; }
-    #viewBtns button { margin: 0 0 0 -1px; border-radius: 0; padding: 7px 2px; font-size: 13px; }
-    #viewBtns button:nth-child(4n+1) { margin-left: 0; }
-    #viewBtns button:nth-child(n+5) { margin-top: -1px; }
-    #viewBtns button:nth-child(1) { border-radius: 6px 0 0 0; }
-    #viewBtns button:nth-child(4) { border-radius: 0 6px 0 0; }
-    #viewBtns button:nth-child(5) { border-radius: 0 0 0 6px; }
-    #viewBtns button:nth-child(8) { border-radius: 0 0 6px 0; }
+    /* View controls after Today */
+    #viewBtns { gap: 2px; }
+    #viewMenuBtn { padding: 6px 10px; font-size: 13px; }
+    .view-nav .nav-arrow { padding: 4px 8px; }
     .toolbar { gap: 6px; }
     .toolbar .spacer { display: none; }
-    .toolbar > button, .toolbar .seg:not(#viewBtns) button { padding: 6px 10px; font-size: 13px; }
+    .toolbar > button, .toolbar .seg button { padding: 6px 10px; font-size: 13px; }
     /* A tighter list */
     .labels .row, .labels .head { padding: 0 6px; gap: 4px; }
     .labels .row.grouped { padding-left: 10px; }
@@ -381,15 +375,10 @@
     .labels .row:has(.renaming) .reveal, .labels .row:has(.renaming) .sub-count { display: none; }
   }
 
-  /* ---- Phones: Schedule view, or the Chart turned ---- */
-  .phone-only, #schedule, #turned { display: none; }
+  /* ---- Phones: the Chart turned ---- */
+  #turned { display: none; }
   @media (max-width: 640px) {
-    .phone-only { display: inline-flex; }
-    /* Schedule: the chart and its view buttons step aside */
-    html.phone-schedule #chart, html.phone-schedule #viewBtns, html.phone-schedule #collapseAllBtn { display: none !important; }
-    html:not(.phone-schedule) #schedTodayBtn { display: none; }
-    html.phone-schedule #schedule { display: block; flex: 1; min-height: 0; overflow-y: auto; }
-    /* Chart: the turned chart instead of the normal one */
+    /* The turned chart instead of the normal one */
     html.phone-chart #chart { display: none !important; }
     html.phone-chart #turned { display: block; flex: 1; min-height: 0; overflow: auto; touch-action: pan-x pan-y; }
   }
@@ -409,10 +398,16 @@
             border-top: 1px solid color-mix(in srgb, var(--muted) 35%, var(--line)); }
   .t-band.m { border-top-color: color-mix(in srgb, var(--muted) 70%, var(--line)); }
   .t-band.q { border-top: 2px solid var(--text); }
-  .t-band-label { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; justify-content: center;
-                  padding: 0 6px; font-size: 11px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden;
-                  background: color-mix(in srgb, var(--muted) 7%, var(--panel)); }
-  .t-band-label b { color: var(--text); }
+  /* Quarter / month / week labels: each pinned at the top of the date column
+     while its period is on screen (the quarter above the month above the week) */
+  .t-period { position: absolute; left: 0; right: 0; pointer-events: none; }
+  .t-period-label { position: sticky; display: block; height: 14px; padding: 0 6px; font-size: 11px; line-height: 14px;
+                    color: var(--muted); white-space: nowrap; overflow: hidden;
+                    background: color-mix(in srgb, var(--muted) 7%, var(--panel)); }
+  .t-period-label.l0 { z-index: 3; }
+  .t-period-label.l1 { z-index: 2; }
+  .t-period-label.l2 { z-index: 1; box-shadow: 0 1px 0 var(--line); }
+  .t-period-label b { color: var(--text); }
   .t-today { position: absolute; left: 0; right: 0; height: 2px; background: var(--today); z-index: 2; }
   /* A group's line, in its own thin column */
   .t-gline { position: absolute; z-index: 1; width: 6px; border-radius: 3px; background: var(--bar); opacity: .7; cursor: pointer; }
@@ -476,34 +471,12 @@
   .sheet-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
   .sheet-delete { color: var(--today); border-color: color-mix(in srgb, var(--today) 40%, var(--line)); }
 
-  #schedule h3 { position: sticky; top: 0; z-index: 2; margin: 0; padding: 10px 2px 6px; font-size: 13px;
-                 background: var(--panel); color: var(--muted); }
-  #schedule .sched-week.current h3 { color: var(--accent); }
-  .sched-card { display: block; margin: 0 0 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
-                border-left: 5px solid var(--bar); background: color-mix(in srgb, var(--bar) 8%, var(--panel)); cursor: pointer; }
-  .sched-card.done { opacity: .55; filter: grayscale(1); }
-  .sched-main { display: flex; align-items: center; gap: 10px; }
-  .sched-card .status { --ring: var(--bar); flex: none; width: 20px; height: 20px; padding: 0; border: 2px solid var(--ring);
-                        border-radius: 50%; background: #fff; color: #fff; font-size: 12px; font-weight: 800; line-height: 16px; }
-  .sched-card .status.checked { background: var(--ring); }
-  .sched-card .status.ring { position: relative; border: none;
-                             background: conic-gradient(var(--ring) calc(var(--pct) * 1%), color-mix(in srgb, var(--ring) 55%, #fff) 0); }
-  .sched-card .status.ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #fff; }
-  .sched-text { min-width: 0; flex: 1; }
-  .sched-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px;
-                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sched-name .ms-icon { background: var(--bar); }
-  .sched-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .sched-details { margin: 10px 0 0 30px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-  .sched-sub { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; flex-wrap: wrap; }
-  .sched-sub input { accent-color: var(--bar); }
-  .sched-sub .sub-checked { text-decoration: line-through; opacity: .6; }
-  .sched-sub a, .sched-link { color: var(--accent); font-size: 13px; }
-  .sched-edit { align-self: flex-start; margin-top: 4px; font-size: 13px; padding: 6px 10px; }
-  .sched-empty { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
-
   /* Sheet: details look like plain text until tapped */
   #sheetBody:focus { outline: none; }
   .sheet-grid input, .sheet-grid select { border-color: transparent; background: transparent; padding: 3px 0; font-size: 15px; color: var(--text); }
   .sheet-grid input:focus, .sheet-grid select:focus { border-color: var(--accent); background: var(--bg); padding: 3px 6px; }
   .sheet-adder { border: none; background: none; color: var(--accent); padding: 6px 0; font-size: 14px; }
+
+  /* The task sheet on a computer: a centred panel */
+  @media (min-width: 641px) { dialog.sheet { width: min(520px, calc(100vw - 32px)); border-radius: 12px; } }
+  main > h1 { flex: none; }

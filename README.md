@@ -3,7 +3,7 @@
 A simple, straight-to-the-point Gantt chart that runs in your browser. It is a
 single HTML file with no install, no build step and no dependencies.
 
-![Simple Gantt screenshot](screenshot.png)
+![Simple Gantt on a computer](screenshot.png)
 
 ## Getting started
 
@@ -15,9 +15,9 @@ Remove them with **Clear all**.
 ## Features
 
 ### Tasks
-- **Add a task:** enter a name, an optional group, a start date and an end date, then click **Add task**. Or drag across empty days in the chart (see *Creating a task by dragging*).
+- **Add a task:** click **+ New task** (a task from today to two days from now opens in its sheet, with the name ready to type; closing it unchanged removes it again), or drag across empty days in the chart (see *Creating a task by dragging*).
 - **Rename** a task, subtask or group: click its name in the list, type, and press **Enter** (or click elsewhere, or straight on the next name); **Esc** cancels. Renaming a group to the name of another group merges them.
-- **Edit a task's dates, group or milestone:** double-click its bar in the chart or its row in the list, change the details, then click **Save**.
+- **Open a task:** click its bar in the chart, or its row in the list (anywhere but the name). Its **sheet** shows everything about it; click anything to change it: name, done, start and end dates, group, milestone, links, and its subtasks (tick, rename, links, ✕, **+ Add subtask**). **Delete task** removes it. Changes are saved straight away. On a phone the sheet slides up from the bottom.
 - **Delete a task:** click ✕ in the list.
 - A task's end date is included, so a task from the 3rd to the 5th lasts 3 days.
 
@@ -31,11 +31,11 @@ links is always shown. Hidden buttons can't be clicked by accident.
 ### On a phone
 On narrow screens the app adapts:
 
-- It opens on a **Schedule**: you scroll **down** through time. Each week is a heading ("Week 41 · 5–11 Oct"), starting at this week, which also lists tasks still running from earlier weeks. Each task is a card with its colour, status circle, name, dates, group, subtask count and 📎. Tap a card to open it: tick off subtasks, open its links, or tap **Edit** for dates, group and milestone.
-- **Schedule | Chart** at the top switches to the Gantt chart, **turned a quarter** so you also scroll **down** through time: dates run down the left side and each task is a vertical bar in its own column, with its name written inside (in its group's colour, with its progress and ◆ milestones). Each group has a thin column with a line over the group's dates (tap it to collapse or expand the group). Wherever a quarter, month or week begins, a band shows that information stacked ("Q4 · Oct 2026 · Week 40"), and every day shows its label ("Thu 1"). The dates stay in place while you scroll sideways. Day / Week / Month / Quarter, ‹ ›, Today and Overview work up/down (a long period may need a little scrolling), and a pinch zooms.
-- **Tap a task** (in the Chart, or **Open task** on a Schedule card) to open its **sheet**. It opens showing the information; tap anything to change it: name, done, dates, group and milestone; add, open or remove links; and manage its subtasks — tick them off, rename them, give each its own links (📎) or delete it (✕), and add new ones. **Delete task** removes it. Changes are saved straight away.
-- **Create a task in the Chart:** press and hold an empty spot for half a second (the phone buzzes and a dashed outline appears), then drag down or up over the days and let go, and give it a name. Moving straight away just scrolls. The task goes into the group of the column you pressed in, if that group's dates cover the start date.
-- The form folds away behind **+ New task** (it also opens when you edit a task).
+<img src="screenshot-phone.png" alt="Simple Gantt on a phone" width="320">
+
+- The Gantt chart is **turned a quarter** so you scroll **down** through time: dates run down the left side and each task is a vertical bar in its own column, with its name written inside (in its group's colour, with its progress and ◆ milestones). Each group has a thin column with a line over the group's dates (tap it to collapse or expand the group). Wherever a quarter, month or week begins, a band shows that information stacked ("Q4 · Oct 2026 · Week 40"), and every day shows its label ("Thu 1"). The current quarter, month and week stay **pinned at the top** of the date column while you scroll, until the next one pushes them away. The dates stay in place while you scroll sideways. Today, ‹ › and the view menu (Day / Week / Month / Quarter / Overview) work up/down (a long period may need a little scrolling), and a pinch zooms.
+- **Tap a task** to open its **sheet**. It opens showing the information; tap anything to change it: name, done, dates, group and milestone; add, open or remove links; and manage its subtasks — tick them off, rename them, give each its own links (📎) or delete it (✕), and add new ones. **Delete task** removes it. Changes are saved straight away.
+- **Create a task:** press and hold an empty spot for half a second (the phone buzzes and a dashed outline appears), then drag down or up over the days and let go, and give it a name. Moving straight away just scrolls. The task goes into the group of the column you pressed in, if that group's dates cover the start date.
 
 ### Dragging in the chart
 | Where you grab the bar | What changes |
@@ -81,8 +81,8 @@ A link means **"this task can't start until that one has finished"**.
 - Deleting a task removes its links. Arrows to tasks in a collapsed group are hidden until you expand it.
 
 ### Moving the tasks that come after
-When a task's end date changes (by dragging it, dragging its group, or in the
-form), a dialog asks what to do with the tasks that come after it. Each choice
+When a task's end date changes (by dragging it, dragging its group, or in its
+sheet), a dialog asks what to do with the tasks that come after it. Each choice
 says exactly what it would do, e.g. "Build moves 2 days later".
 
 **Linked tasks** (the tasks linked after it, and the rest of their chain):
@@ -134,11 +134,12 @@ the list.
 - The chart header shows the quarter (Q1–Q4), the month and year, the week number (ISO weeks, Monday to Sunday; "Week 41", or "W41" when space is short) and the day numbers.
 - While you scroll sideways, the current quarter, month and week stay pinned at the left edge until the next one takes over.
 - Weekends are shaded, and a red line marks today.
-- **Day / Week / Month / Quarter** work like in Google Calendar: each shows exactly one day, week (Monday to Sunday), month or quarter across the timeline. **‹** and **›** step one period back or forward, and **Today** jumps to the period containing today. Switching view keeps the date you're looking at. The selected view lights up and is remembered, so the app opens on it. Every day stays its own column; when zoomed out the daily lines get fainter and week and month starts get stronger lines. In Day view the header also shows the weekday.
-- **Pinching** zooms freely (the view button goes off); without a view selected, **‹ ›** move one screen and **Today** scrolls to today.
+- The view controls work like in Google Calendar, **Today** is in the toolbar, and **‹ [Week ▾] ›** sits in the empty corner above the task list (on a phone, in the toolbar after Today): a **view menu** showing the current choice, with the arrows either side. The menu offers **Day / Week / Month / Quarter**, each showing exactly one day, week (Monday to Sunday), month or quarter across the timeline, and **Overview**. **‹** and **›** step one period back or forward, and **Today** jumps to the period containing today. Switching view keeps the date you're looking at. The chosen view is ticked in the menu and remembered, so the app opens on it. Every day stays its own column; when zoomed out the daily lines get fainter and week and month starts get stronger lines. In Day view the header also shows the weekday.
+- **Pinching** zooms freely (the menu then says "Custom ▾"); without a view selected, **‹ ›** move one screen and **Today** scrolls to today.
+- **Mouse wheel:** over the tasks it scrolls up and down; over the **date header** it moves through time (sideways).
 - **Zoom by pinching** on a trackpad or phone (or **Ctrl + mouse wheel**) over the timeline. The day under the pointer, or between your fingers, stays in place.
-- **The page stays still; the chart scrolls.** The form and toolbar stay in place, and the chart fills the rest of the window. Inside it, up/down scrolling moves the list and the timeline together; sideways (two-finger swipe, or **Shift + wheel**) moves earlier/later in time. The dates stay pinned at the top and the task list stays pinned on the left.
-- **Overview** zooms so the whole project fits the visible width and scrolls to the top; the button stays highlighted, and clicking it again takes you back to where you were. (At the furthest zoom, 2 px per day, very long projects may still need a little sideways scrolling.)
+- **The page stays still; the chart scrolls.** The toolbar stays in place, and the chart fills the rest of the window. Inside it, up/down scrolling moves the list and the timeline together; sideways (two-finger swipe, or **Shift + wheel**) moves earlier/later in time. The dates stay pinned at the top and the task list stays pinned on the left.
+- **Overview** zooms so the whole project fits the visible width and scrolls to the top; the menu says "Overview ▾", and picking Overview again takes you back to where you were. (At the furthest zoom, 2 px per day, very long projects may still need a little sideways scrolling.)
 - The chart opens on the remembered view (Day / Week / Month / Quarter) around today, or scrolled to **today** when none is selected. The chart always includes today, and has a screen's width of extra days at each end, so there's always room to scroll and zoom.
 
 ### Coming up
@@ -195,16 +196,18 @@ computer.
 
 | File | What's in it |
 |---|---|
-| `index.html` | The page layout: the form, the toolbar, the chart container and the dialogs. |
+| `index.html` | The page layout: the toolbar, the chart containers (chart, and the turned chart for phones) and the dialogs (task sheet, move dialog, confirm, new-task name). |
 | `styles.css` | All styling. Colours are CSS variables on `:root`, with a dark-mode version. |
 | `app.js` | All behaviour (see below). |
-| `screenshot.png` | The picture at the top of this README. |
+| `screenshot.png` | The picture at the top of this README (on a computer). |
+| `screenshot-phone.png` | The phone picture in this README. |
 
 What's in `app.js`:
 
 - storage: `load`, `save`, `syncGroupColors`
 - the group colours: `PALETTE`
-- the form: the `submit` handler, `startEdit`, `resetForm`
+- the task sheet: `openTaskSheet`, `drawSheet` and its handlers; **+ New task**
+- phones: `applyPhoneLayout`, `renderTurned` (the turned chart and its day ↔ position map), press-and-drag and pinch
 - collapsed groups: `collapsed`, `toggleGroup`
 - group order: `groupOrder` (remembers the order of groups that start on the same day)
 - dragging (tasks, groups, list rows, creating tasks) and auto-scroll: `applyDragVisual`, `autoScroll`, and the `pointerdown`, `pointermove` and `pointerup` handlers

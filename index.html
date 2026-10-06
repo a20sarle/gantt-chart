@@ -6,55 +6,36 @@
 <title>Simple Gantt</title>
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever styles.css or app.js changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-06.13">
+<link rel="stylesheet" href="styles.css?v=2026-10-06.21">
 </head>
 <body>
 <main>
   <!-- The project name: click to rename. It heads saved images. -->
   <h1 id="projectName" contenteditable="plaintext-only" spellcheck="false" title="Click to rename the project"></h1>
 
-  <section class="panel form-panel">
-    <!-- Only shown on phones, where the form is folded away -->
-    <button type="button" id="newTaskBtn" class="primary new-task-btn">+ New task</button>
-    <form id="taskForm">
-      <label>Task <input name="name" required placeholder="e.g. Design mockups"></label>
-      <label>Group <input name="group" list="groupList" placeholder="optional"></label>
-      <datalist id="groupList"></datalist>
-      <label>Start <input name="start" type="date" required></label>
-      <label>End <input name="end" type="date" required></label>
-      <label>Milestone ◆
-        <select name="milestone">
-          <option value="">None</option>
-          <option value="start">At start</option>
-          <option value="end">At end</option>
-        </select>
-      </label>
-      <button class="primary" type="submit" id="submitBtn">Add task</button>
-      <button type="button" id="cancelEdit" hidden>Cancel</button>
-    </form>
-    <div class="error" id="error"></div>
-  </section>
 
-  <section class="panel chart-panel">
+  <section class="chart-panel">
     <div class="toolbar">
-      <!-- What the chart shows, as one joined group. Day / Week / Month set the
-           zoom to a preset (pinching zooms freely); Today and Overview move the view. -->
-      <div class="seg" id="viewBtns" role="group" aria-label="View">
-        <button data-view="day" title="Show one day">Day</button>
-        <button data-view="week" title="Show one week (Monday to Sunday)">Week</button>
-        <button data-view="month" title="Show one month">Month</button>
-        <button data-view="quarter" title="Show one quarter">Quarter</button>
-        <button id="prevBtn" title="Previous" aria-label="Previous">‹</button>
-        <button id="todayBtn" title="Go to today">Today</button>
-        <button id="nextBtn" title="Next" aria-label="Next">›</button>
-        <button id="overviewBtn" title="Fit the whole project in view (click again to go back)">Overview</button>
+      <button id="newTaskBtn" class="primary" title="Add a task (or drag across empty days in the chart)">+ New task</button>
+      <button id="todayBtn" title="Go to today">Today</button>
+      <!-- What the chart shows: back / forward around a menu to pick Day / Week /
+           Month / Quarter or Overview (pinching zooms freely). On a computer app.js
+           moves this into the empty corner above the task list. -->
+      <div class="view-nav" id="viewBtns" role="group" aria-label="View">
+        <button id="prevBtn" class="nav-arrow" title="Previous" aria-label="Previous">‹</button>
+        <div class="menu-wrap">
+          <button id="viewMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="viewMenu" title="Choose what the chart shows">Week ▾</button>
+          <div class="menu view-menu" id="viewMenu" role="menu" hidden>
+            <button role="menuitemradio" data-view="day" title="Show one day">Day</button>
+            <button role="menuitemradio" data-view="week" title="Show one week (Monday to Sunday)">Week</button>
+            <button role="menuitemradio" data-view="month" title="Show one month">Month</button>
+            <button role="menuitemradio" data-view="quarter" title="Show one quarter">Quarter</button>
+            <hr>
+            <button role="menuitemcheckbox" id="overviewBtn" title="Fit the whole project in view (pick again to go back)">Overview</button>
+          </div>
+        </div>
+        <button id="nextBtn" class="nav-arrow" title="Next" aria-label="Next">›</button>
       </div>
-      <!-- Phones only: Schedule (a list by week) or the Gantt chart, and showing the task list -->
-      <div class="seg phone-only" id="phoneViewBtns" role="group" aria-label="Phone view">
-        <button data-phone="schedule">Schedule</button>
-        <button data-phone="chart">Chart</button>
-      </div>
-      <button id="schedTodayBtn" class="phone-only" title="Go to this week">Today</button>
       <button id="collapseAllBtn" hidden>Collapse all</button>
       <span class="spacer"></span>
       <!-- Saving and loading, as one joined group: an Export menu and Import -->
@@ -73,8 +54,6 @@
       <input id="importFile" type="file" accept="application/json" hidden>
     </div>
     <div id="chart"></div>
-    <!-- Phones: tasks as a list by week, scrolled downwards (filled by app.js) -->
-    <div id="schedule"></div>
     <!-- Phones: the chart turned a quarter, time running down (filled by app.js) -->
     <p class="turned-hint">Press and hold an empty spot, then drag, to add a task. Tap a task to open it.</p>
     <div id="turned"></div>
@@ -94,7 +73,10 @@
   </form>
 </dialog>
 
-<!-- Phones: everything about one task, slid up from the bottom (filled by app.js) -->
+<!-- Group names suggested when typing a task's group -->
+<datalist id="groupList"></datalist>
+
+<!-- Everything about one task: a panel on a computer, slid up from the bottom on a phone (filled by app.js) -->
 <dialog id="taskSheet" class="sheet" aria-label="Task"><div id="sheetBody" tabindex="-1"></div></dialog>
 
 <dialog id="confirmDialog">
@@ -138,6 +120,6 @@
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-06.13"></script>
+<script src="app.js?v=2026-10-06.21"></script>
 </body>
 </html>
