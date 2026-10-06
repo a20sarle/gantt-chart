@@ -21,6 +21,18 @@ Remove them with **Clear all**.
 - **Delete a task:** click ✕ in the list.
 - A task's end date is included, so a task from the 3rd to the 5th lasts 3 days.
 
+### Row buttons
+Each task row has 📎 (links), + (add subtask) and ✕ (delete); subtask rows have
+📎 and ✕. To keep the list clean they only show when needed: with a mouse,
+while you **hover** the row; on a phone or tablet, after you **tap** the row
+(tap the name again to rename it; tap elsewhere to hide the buttons). A 📎 with
+links is always shown. Hidden buttons can't be clicked by accident.
+
+### On a phone
+The layout adapts to narrow screens: the form folds away behind **+ New task**
+(it also opens when you edit a task), the view buttons form a 2 × 4 grid, and
+the task list is narrower so the chart gets more room.
+
 ### Dragging in the chart
 | Where you grab the bar | What changes |
 |---|---|

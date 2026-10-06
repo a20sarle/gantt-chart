@@ -6,14 +6,16 @@
 <title>Simple Gantt</title>
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever styles.css or app.js changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-06.3">
+<link rel="stylesheet" href="styles.css?v=2026-10-06.6">
 </head>
 <body>
 <main>
   <!-- The project name: click to rename. It heads saved images. -->
   <h1 id="projectName" contenteditable="plaintext-only" spellcheck="false" title="Click to rename the project"></h1>
 
-  <section class="panel">
+  <section class="panel form-panel">
+    <!-- Only shown on phones, where the form is folded away -->
+    <button type="button" id="newTaskBtn" class="primary new-task-btn">+ New task</button>
     <form id="taskForm">
       <label>Task <input name="name" required placeholder="e.g. Design mockups"></label>
       <label>Group <input name="group" list="groupList" placeholder="optional"></label>
@@ -122,6 +124,6 @@
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-06.2"></script>
+<script src="app.js?v=2026-10-06.4"></script>
 </body>
 </html>

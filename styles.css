@@ -1,4 +1,5 @@
   :root {
+    --labels-w: 220px; /* width of the task list (narrower on phones) */
     --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
     --line: #e4e4e0; --accent: #3b6fd8; --today: #d94a3b; --weekend: #f0f0ec;
   }
@@ -37,7 +38,7 @@
   .toolbar .spacer { flex: 1; }
 
   /* Chart */
-  .chart { display: grid; grid-template-columns: 220px auto; width: max-content; min-width: 100%; }
+  .chart { display: grid; grid-template-columns: var(--labels-w) auto; width: max-content; min-width: 100%; }
   .labels { border-right: 1px solid var(--line); position: sticky; left: 0; z-index: 5; background: var(--panel); }
   .labels > .head { position: sticky; top: 0; z-index: 6; background: var(--panel); }
   .track > .head { position: sticky; top: 0; z-index: 4; background: var(--panel); }
@@ -55,7 +56,7 @@
      month/week label is a block as wide as its period; the text inside sticks to
      the left edge while scrolling (overflow: clip keeps it inside its block). */
   .hspan { position: absolute; height: 16px; line-height: 16px; font-size: 11px; white-space: nowrap; overflow: clip; }
-  .hspan > span { position: sticky; left: 220px; display: inline-block; padding: 0 4px; } /* pinned just right of the task list (LABELS_W) */
+  .hspan > span { position: sticky; left: var(--labels-w); display: inline-block; padding: 0 4px; } /* pinned just right of the task list */
   .hspan.quarter { top: 3px; font-weight: 700; border-left: 2px solid var(--text); }
   .hspan.month { top: 20px; font-weight: 600; border-left: 1px solid var(--line); }
   .hspan.week { top: 37px; color: var(--muted); border-left: 1px solid var(--line); }
@@ -312,11 +313,9 @@
 
   /* Paperclip on task and subtask rows: always shown once there are links,
      otherwise only while hovering the row (or faintly on touch screens) */
-  .labels .row .link-btn { display: inline-flex; align-items: center; gap: 1px; padding: 0 3px; flex: none; opacity: 0; }
-  .labels .row:hover .link-btn, .labels .row .link-btn:focus-visible { opacity: .5; }
+  .labels .row .link-btn { display: inline-flex; align-items: center; gap: 1px; padding: 0 3px; flex: none; }
   .labels .row .link-btn.has-links { opacity: 1; }
   .labels .row .link-btn small { font-size: 10px; font-weight: 700; }
-  @media (hover: none) { .labels .row .link-btn { opacity: .4; } .labels .row .link-btn.has-links { opacity: 1; } }
 
   /* The links panel */
   .link-panel { position: fixed; z-index: 40; width: min(340px, calc(100vw - 16px)); padding: 12px 14px;
@@ -333,8 +332,51 @@
   .link-panel form { display: flex; gap: 6px; }
   .link-panel form input { flex: 1; min-width: 0; }
 
-  /* The + (add subtask) button: only shown while hovering the row (faintly on
-     touch screens, which have no hover) */
-  .labels .row .sub-add-btn { opacity: 0; }
-  .labels .row:hover .sub-add-btn, .labels .row .sub-add-btn:focus-visible { opacity: .7; }
-  @media (hover: none) { .labels .row .sub-add-btn { opacity: .4; } }
+  /* Row buttons that only show when needed (📎 without links, +, ✕): while
+     hovering the row with a mouse, or once the row is tapped on a touch screen.
+     Hidden buttons can't be clicked or tapped by accident. */
+  .labels .row .reveal { visibility: hidden; }
+  @media (hover: hover) { .labels .row:hover .reveal { visibility: visible; } }
+  .labels .row.selected .reveal, .labels .row .reveal:focus-visible, .labels .row .link-btn.has-links { visibility: visible; }
+  .labels .row.selected { box-shadow: inset 3px 0 0 var(--bar); }
+
+  /* "+ New task" only exists on phones (see below) */
+  .new-task-btn { display: none; }
+
+  /* ---- Phones ---- */
+  @media (max-width: 640px) {
+    :root { --labels-w: 150px; }
+    main { padding: 12px 8px; }
+    h1 { font-size: 18px; margin-bottom: 10px; }
+    .panel { padding: 10px; margin-bottom: 10px; }
+    /* The form folds away behind "+ New task" */
+    .new-task-btn { display: block; width: 100%; }
+    .form-panel.open .new-task-btn { width: auto; margin-bottom: 10px; background: var(--panel); color: var(--text); border-color: var(--line); }
+    .form-panel:not(.open) #taskForm, .form-panel:not(.open) .error { display: none; }
+    input[name=name] { min-width: 0; width: 100%; }
+    #taskForm label { flex: 1 1 140px; }
+    #taskForm input, #taskForm select { width: 100%; }
+    /* View buttons as a joined 2 x 4 grid: Day Week Month Quarter / ‹ Today › Overview */
+    #viewBtns { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; }
+    #viewBtns button { margin: 0 0 0 -1px; border-radius: 0; padding: 7px 2px; font-size: 13px; }
+    #viewBtns button:nth-child(4n+1) { margin-left: 0; }
+    #viewBtns button:nth-child(n+5) { margin-top: -1px; }
+    #viewBtns button:nth-child(1) { border-radius: 6px 0 0 0; }
+    #viewBtns button:nth-child(4) { border-radius: 0 6px 0 0; }
+    #viewBtns button:nth-child(5) { border-radius: 0 0 0 6px; }
+    #viewBtns button:nth-child(8) { border-radius: 0 0 6px 0; }
+    .toolbar { gap: 6px; }
+    .toolbar .spacer { display: none; }
+    .toolbar > button, .toolbar .seg:not(#viewBtns) button { padding: 6px 10px; font-size: 13px; }
+    /* A tighter list */
+    .labels .row, .labels .head { padding: 0 6px; gap: 4px; }
+    .labels .row.grouped { padding-left: 10px; }
+    .labels .row.sub-row { padding-left: 26px; }
+    .labels .row.sub-row::before { left: 15px; }
+    .labels .row { font-size: 13px; }
+    /* Hidden row buttons take no room, so names get the whole width until the row is tapped */
+    .labels .row .reveal { display: none; }
+    .labels .row.selected .reveal, .labels .row .link-btn.has-links { display: inline-flex; }
+    /* While renaming, the name gets the whole row */
+    .labels .row:has(.renaming) .reveal, .labels .row:has(.renaming) .sub-count { display: none; }
+  }

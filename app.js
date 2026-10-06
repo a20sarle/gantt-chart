@@ -289,7 +289,22 @@ function resetForm() {
   form.reset();
   document.getElementById('submitBtn').textContent = 'Add task';
   document.getElementById('cancelEdit').hidden = true;
+  showForm(false);
 }
+
+// On phones the form is folded away behind "+ New task" (styles.css); it opens
+// when you tap that button or edit a task, and closes after saving or cancelling.
+const formPanel = document.querySelector('.form-panel');
+function showForm(open) {
+  formPanel.classList.toggle('open', open);
+  document.getElementById('newTaskBtn').textContent = open ? 'Close' : '+ New task';
+}
+document.getElementById('newTaskBtn').onclick = () => {
+  const opening = !formPanel.classList.contains('open');
+  if (!opening && editingId) return resetForm();
+  showForm(opening);
+  if (opening) form.name.focus();
+};
 
 function startEdit(id) {
   const t = tasks.find(t => t.id === id);
@@ -299,6 +314,7 @@ function startEdit(id) {
   form.milestone.value = t.milestone || '';
   document.getElementById('submitBtn').textContent = 'Save';
   document.getElementById('cancelEdit').hidden = false;
+  showForm(true);
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   form.start.focus();
 }
@@ -315,7 +331,7 @@ function removeTask(id) {
 // remembered. A day can be as wide as the whole timeline (for the Day view).
 const ZOOM_KEY = 'simple-gantt-zoom';
 const MIN_DAY_W = 2;
-const maxDayW = () => Math.max(60, chartEl.clientWidth - LABELS_W);
+const maxDayW = () => Math.max(60, chartEl.clientWidth - labelsW());
 let zoom = 28;
 try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= MIN_DAY_W && z <= 5000) zoom = z; } catch {}
 function setZoom(px, { keepView = false } = {}) {
@@ -362,7 +378,7 @@ function openView(v, date) {
   viewDate = date;
   viewRange = p;
   const days = daysBetween(parse(p.start), parse(p.end)) + 1;
-  setZoom((chartEl.clientWidth - LABELS_W) / days, { keepView: true });
+  setZoom((chartEl.clientWidth - labelsW()) / days, { keepView: true });
   chartEl.scrollLeft = daysBetween(chartStart, parse(p.start)) * renderedDayW;
   tidyHeaderLabels();
 }
@@ -374,7 +390,7 @@ document.getElementById('viewBtns').onclick = e => {
 
 // ‹ and ›: one period back or forward (one screen when zoomed freely)
 function step(dir) {
-  if (!view) { chartEl.scrollLeft += dir * (chartEl.clientWidth - LABELS_W); return; }
+  if (!view) { chartEl.scrollLeft += dir * (chartEl.clientWidth - labelsW()); return; }
   const d = parse(viewDate), y = d.getUTCFullYear(), m = d.getUTCMonth();
   const next = view === 'day' ? new Date(+d + dir * DAY)
     : view === 'week' ? new Date(+d + dir * 7 * DAY)
@@ -388,7 +404,7 @@ document.getElementById('nextBtn').onclick = () => step(1);
 function scrollToToday() {
   if (!timelineEl()) return;
   const x = daysBetween(chartStart, parse(todayString())) * renderedDayW;
-  chartEl.scrollLeft = Math.max(0, x - (chartEl.clientWidth - LABELS_W) / 4);
+  chartEl.scrollLeft = Math.max(0, x - (chartEl.clientWidth - labelsW()) / 4);
 }
 // Today: today's period in Day / Week / Month / Quarter, otherwise scroll to today
 document.getElementById('todayBtn').onclick = () => view ? openView(view, todayString()) : scrollToToday();
@@ -409,7 +425,7 @@ document.getElementById('overviewBtn').onclick = () => {
   const back = { dayW: renderedDayW, leftDay: dayNumber(chartStart) + chartEl.scrollLeft / renderedDayW, top: chartEl.scrollTop };
   const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
   const days = daysBetween(first, last) + 1 + 2; // the project plus a day either side
-  setZoom((chartEl.clientWidth - LABELS_W) / days); // setZoom keeps it within 2..60 px per day
+  setZoom((chartEl.clientWidth - labelsW()) / days); // setZoom keeps it within 2..60 px per day
   chartEl.scrollLeft = daysBetween(chartStart, first - DAY) * renderedDayW;
   chartEl.scrollTop = 0;
   overviewReturn = back;
@@ -433,7 +449,7 @@ function buildExport(targetW) {
   const keep = { leftDay: dayNumber(chartStart) + chartEl.scrollLeft / renderedDayW, top: chartEl.scrollTop };
   // Draw the chart at the export size, copy it, then draw the normal view again
   // (all in one go, so the screen never shows the export version)
-  const dayW = Math.min(28, Math.max(2, (targetW - LABELS_W) / days));
+  const dayW = Math.min(28, Math.max(2, (targetW - labelsW()) / days));
   exportOpts = { dayW, first, last };
   render();
   const chart = chartEl.querySelector('.chart').cloneNode(true);
@@ -505,7 +521,7 @@ function applyZoom() {
   const { px, clientX } = zoomPending;
   zoomPending = null;
   if (Math.abs(px - renderedDayW) < 0.01) return;
-  const anchorX = clientX - (chartEl.getBoundingClientRect().left + LABELS_W); // from the timeline's visible left edge
+  const anchorX = clientX - (chartEl.getBoundingClientRect().left + labelsW()); // from the timeline's visible left edge
   const day = pointerDay(clientX);
   setZoom(px);
   chartEl.scrollLeft = (day - dayNumber(chartStart)) * renderedDayW - anchorX;
@@ -842,6 +858,23 @@ chartEl.addEventListener('focusout', e => {
   if (e.target.matches('.sub-new')) finishAddingSubtask(e.target, { keep: true, next: false });
 });
 
+// ---- Selected row (touch screens) ----
+// Phones and tablets have no hover, so a row's 📎 + ✕ buttons appear when you
+// tap the row; tapping elsewhere hides them again. (With a mouse, hovering does it.)
+let selected = null; // { task, sub } of the tapped row
+const isSelected = (task, sub) => !!selected && selected.task === task && (selected.sub || null) === (sub || null);
+function selectRow(row) {
+  selected = row.classList.contains('sub-row') ? { task: row.dataset.task, sub: row.dataset.sub } : { task: row.dataset.id };
+  chartEl.querySelectorAll('.labels .row.selected').forEach(r => r.classList.remove('selected'));
+  row.classList.add('selected');
+}
+document.addEventListener('pointerdown', e => {
+  if (selected && !e.target.closest('.labels .task-row, .labels .sub-row, #linkPanel')) {
+    selected = null;
+    chartEl.querySelectorAll('.labels .row.selected').forEach(r => r.classList.remove('selected'));
+  }
+});
+
 // ---- Links (attached to tasks and subtasks) ----
 // Each task and subtask can have links (a Google Doc, a website, …), stored as
 // `links: [{ url }]`. A paperclip button on the row shows them; it is always
@@ -876,7 +909,7 @@ function linkLabel(url) {
 
 function linkButton(links, taskId, subId) {
   const n = (links || []).length;
-  return `<button class="link-btn${n ? ' has-links' : ''}" data-task="${taskId}"${subId ? ` data-sub="${subId}"` : ''}
+  return `<button class="link-btn reveal${n ? ' has-links' : ''}" data-task="${taskId}"${subId ? ` data-sub="${subId}"` : ''}
     title="${n ? `${n} link${n > 1 ? 's' : ''}` : 'Add a link'}">${CLIP_ICON}${n > 1 ? `<small>${n}</small>` : ''}</button>`;
 }
 
@@ -1051,7 +1084,8 @@ let showsGroupHeaders = false;      // whether the last render had group header 
 let displayedGroups = [];           // group names in the order last shown
 
 const ROW_H = 36;     // height of one row in the list and the chart (matches styles.css)
-const LABELS_W = 220; // width of the list column (matches .chart in styles.css)
+// Width of the list column, from styles.css (--labels-w; narrower on phones)
+const labelsW = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--labels-w')) || 220;
 const HEAD_H = 77;    // height of the date header incl. its border (matches .head in styles.css)
 const timelineEl = () => chartEl.querySelector('.timeline');
 const dayNumber = d => Math.round(d / DAY);
@@ -1167,10 +1201,10 @@ function autoScroll() {
   const speed = dist => Math.ceil(Math.min(1, dist / EDGE) * 14); // px per frame, faster nearer the edge
   // The visible part of the timeline: right of the (pinned) task list, below the (pinned) dates
   const box = chartEl.getBoundingClientRect();
-  const r = { left: box.left + LABELS_W, right: box.left + chartEl.clientWidth, top: box.top + HEAD_H, bottom: box.top + chartEl.clientHeight };
+  const r = { left: box.left + labelsW(), right: box.left + chartEl.clientWidth, top: box.top + HEAD_H, bottom: box.top + chartEl.clientHeight };
   // Compare with the drawn days (the track), not scrollWidth: the dragged bar
   // itself can stick out past the last day and stretch the scroll area
-  const atEnd = () => chartEl.scrollLeft + chartEl.clientWidth - LABELS_W >= chartEl.querySelector('.track').offsetWidth - 1;
+  const atEnd = () => chartEl.scrollLeft + chartEl.clientWidth - labelsW() >= chartEl.querySelector('.track').offsetWidth - 1;
 
   if (drag.kind !== 'regroup') { // moving a row in the list only needs vertical scrolling
     if (drag.lastX > r.right - EDGE) {
@@ -1192,6 +1226,13 @@ function autoScroll() {
 let lastPressed = null; // what the last press was on (double-clicks are read from it)
 chartEl.addEventListener('pointerdown', e => {
   lastPressed = e.target;
+  if (e.pointerType === 'touch') {
+    const row = e.target.closest('.labels .task-row, .labels .sub-row');
+    if (row && !row.classList.contains('selected')) {
+      selectRow(row);
+      if (e.target.closest('.name')) return; // first tap on a name only selects the row
+    }
+  }
   if (e.button !== 0 || e.target.closest('button, input, .renaming')) return;
   const name = e.target.closest('.labels .name');
   if (name) {
@@ -1364,7 +1405,7 @@ function render() {
   const todayDate = parse(todayString());
   let min = Math.min(+todayDate, ...sorted.map(t => +parse(t.start)), ...(viewRange ? [+parse(viewRange.start)] : []));
   let max = Math.max(+todayDate + (sorted.length ? 0 : 27 * DAY), ...sorted.map(t => +parse(t.end)), ...(viewRange ? [+parse(viewRange.end)] : []));
-  const pad = Math.max(2, Math.ceil((chartEl.clientWidth - LABELS_W) / dayW));
+  const pad = Math.max(2, Math.ceil((chartEl.clientWidth - labelsW()) / dayW));
   min = new Date(min - (pad + viewExtra.left) * DAY); max = new Date(max + (pad + viewExtra.right) * DAY);
   if (exportOpts) { // the saved image: just the project, with a day either side
     min = new Date(exportOpts.first - DAY); max = new Date(exportOpts.last + DAY);
@@ -1500,7 +1541,7 @@ function render() {
       const rowH = ROW_H * (1 + lines);
 
       labels += `
-        <div class="row task-row${grouped}${done}" data-id="${t.id}" ${rowGroup} style="${colorVars}"
+        <div class="row task-row${grouped}${done}${isSelected(t.id) ? ' selected' : ''}" data-id="${t.id}" ${rowGroup} style="${colorVars}"
              title="Click the name to rename, double-click the row to edit dates and more${showHeaders ? ', drag onto another group to move it there' : ''}">
           ${subs.length
             // With subtasks: a thick two-tone ring that fills up with the progress.
@@ -1514,8 +1555,8 @@ function render() {
           <span class="name">${esc(t.name)}</span>
           ${subs.length ? `<small class="sub-count" title="Subtasks done">${doneSubs}/${subs.length}</small>` : ''}
           ${linkButton(t.links, t.id)}
-          <button class="sub-add-btn" data-task="${t.id}" title="Add subtask">+</button>
-          <button onclick="removeTask('${t.id}')" title="Delete">✕</button>
+          <button class="sub-add-btn reveal" data-task="${t.id}" title="Add subtask">+</button>
+          <button class="reveal" onclick="removeTask('${t.id}')" title="Delete">✕</button>
         </div>`;
 
       rows += `<div class="row${grouped}" ${rowGroup} style="position:relative;height:${rowH}px;${colorVars}">
@@ -1528,11 +1569,11 @@ function render() {
       // being typed when adding one)
       if (open) {
         for (const s of subs) {
-          labels += `<div class="row sub-row${grouped}" ${rowGroup} style="${colorVars}">
+          labels += `<div class="row sub-row${grouped}${isSelected(t.id, s.id) ? ' selected' : ''}" data-task="${t.id}" data-sub="${s.id}" ${rowGroup} style="${colorVars}">
             <input type="checkbox" class="sub-done" data-task="${t.id}" data-sub="${s.id}" ${s.done ? 'checked' : ''}>
             <span class="name${s.done ? ' sub-checked' : ''}" data-task="${t.id}" data-sub="${s.id}" title="Click to rename">${esc(s.name)}</span>
             ${linkButton(s.links, t.id, s.id)}
-            <button class="sub-remove" data-task="${t.id}" data-sub="${s.id}" title="Delete subtask">✕</button>
+            <button class="sub-remove reveal" data-task="${t.id}" data-sub="${s.id}" title="Delete subtask">✕</button>
           </div>`;
         }
         if (adding) {
@@ -1574,7 +1615,7 @@ function render() {
 // A quarter/month/week label that is being pushed out of view (its period is
 // scrolling away behind the task list) is hidden rather than shown cut off.
 function tidyHeaderLabels() {
-  const visibleLeft = chartEl.getBoundingClientRect().left + LABELS_W;
+  const visibleLeft = chartEl.getBoundingClientRect().left + labelsW();
   for (const span of chartEl.querySelectorAll('.hspan')) {
     const label = span.firstElementChild, r = span.getBoundingClientRect();
     label.style.visibility = r.right - Math.max(r.left, visibleLeft) < label.offsetWidth ? 'hidden' : '';
