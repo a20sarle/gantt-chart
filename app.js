@@ -615,13 +615,18 @@ function buildCalendar() {
   const nextDay = s => ymd(fmt(new Date(+parse(s) + DAY)));                // all-day DTEND is exclusive
   const text = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');   // 20261004T101500Z
+  // "Google Doc: https://…" for Google links; other links are just their address
+  const linkLine = url => linkLabel(url).startsWith('Google ') ? `${linkLabel(url)}: ${url}` : url;
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Simple Gantt//EN', 'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH', `X-WR-CALNAME:${text(projectName)}`];
-  const event = (uid, start, endIncl, summary, description, group) => lines.push(
+  const event = (uid, start, endIncl, summary, description, group, attach = []) => lines.push(
     'BEGIN:VEVENT', `UID:${uid}@simple-gantt`, `DTSTAMP:${stamp}`,
     `DTSTART;VALUE=DATE:${ymd(start)}`, `DTEND;VALUE=DATE:${nextDay(endIncl)}`,
     `SUMMARY:${text(summary)}`, `DESCRIPTION:${text(description)}`,
     ...(group ? [`CATEGORIES:${text(group)}`] : []), 'TRANSP:TRANSPARENT',
+    // Links as attachments (shown by Outlook and Apple Calendar; Google ignores
+    // them on import, so they're also written, clickable, in the description)
+    ...attach.map(url => `ATTACH:${url}`),
     // A reminder at 09:00 on the day it starts (9 hours after the all-day event
     // begins); finished tasks (marked ✓) don't need one
     ...(summary.startsWith('✓ ') ? [] : ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${text(summary)} starts today`, 'TRIGGER:PT9H', 'END:VALARM']),
@@ -634,10 +639,13 @@ function buildCalendar() {
       `Project: ${projectName}`,
       t.group ? `Group: ${t.group}` : '',
       subs.length ? `Progress: ${pct}% (${subs.filter(s => s.done).length}/${subs.length} subtasks)` : (t.done ? 'Done' : ''),
-      ...(subs.length ? ['Subtasks:', ...subs.map(s => `${s.done ? '✓' : '☐'} ${s.name}`)] : []),
+      ...((t.links || []).length ? ['Links:', ...t.links.map(l => linkLine(l.url))] : []),
+      ...(subs.length ? ['Subtasks:', ...subs.flatMap(s => [`${s.done ? '✓' : '☐'} ${s.name}`,
+        ...(s.links || []).map(l => `    ${linkLine(l.url)}`)])] : []),
       after.length ? `Starts after: ${after.join(', ')}` : '',
     ].filter(Boolean).join('\n');
-    event(t.id, t.start, t.end, `${pct === 100 ? '✓ ' : ''}${t.name}`, info, t.group);
+    const attach = [...(t.links || []), ...subs.flatMap(s => s.links || [])].map(l => l.url);
+    event(t.id, t.start, t.end, `${pct === 100 ? '✓ ' : ''}${t.name}`, info, t.group, attach);
     if (t.milestone) {
       const day = t.milestone === 'start' ? t.start : t.end;
       event(`${t.id}-milestone`, day, day, `◆ ${t.name}`, `Milestone (${t.milestone} of ${t.name})\n${info}`, t.group);
@@ -687,7 +695,8 @@ document.getElementById('importFile').onchange = async e => {
       id: t.id || uid(), name: t.name, group: t.group || '', start: t.start, end: t.end,
       milestone: t.milestone || '', done: !!t.done,
       after: Array.isArray(t.after) ? t.after.map(String) : [],
-      subtasks: Array.isArray(t.subtasks) ? t.subtasks.map(s => ({ id: s.id || uid(), name: String(s.name), done: !!s.done })) : [],
+      links: cleanLinks(t.links),
+      subtasks: Array.isArray(t.subtasks) ? t.subtasks.map(s => ({ id: s.id || uid(), name: String(s.name), done: !!s.done, links: cleanLinks(s.links) })) : [],
     }));
     save(); render();
   } catch { alert('Could not read that file.'); }
@@ -790,6 +799,8 @@ function finishAddingSubtask(input, { keep, next }) {
 }
 
 chartEl.addEventListener('click', e => {
+  const clip = e.target.closest('.link-btn');
+  if (clip) return openLinks({ task: clip.dataset.task, sub: clip.dataset.sub }, clip);
   const add = e.target.closest('.sub-add-btn');
   if (add) return startAddingSubtask(add.dataset.task);
   const link = e.target.closest('g.link');
@@ -830,6 +841,96 @@ chartEl.addEventListener('keydown', e => {
 chartEl.addEventListener('focusout', e => {
   if (e.target.matches('.sub-new')) finishAddingSubtask(e.target, { keep: true, next: false });
 });
+
+// ---- Links (attached to tasks and subtasks) ----
+// Each task and subtask can have links (a Google Doc, a website, …), stored as
+// `links: [{ url }]`. A paperclip button on the row shows them; it is always
+// visible once there are links, and appears on hover otherwise. Only web links
+// (http/https) are accepted.
+const CLIP_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M21.4 11.1l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+// "docs.google.com/…" -> https://docs.google.com/… ; anything that isn't a web link -> null
+function normalizeUrl(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return null;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
+  try { const u = new URL(s); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') ? u.href : null; } catch { return null; }
+}
+const cleanLinks = list => Array.isArray(list)
+  ? list.map(l => normalizeUrl(l && l.url)).filter(Boolean).map(url => ({ url })) : [];
+
+// A short, readable name for a link
+function linkLabel(url) {
+  const u = new URL(url), host = u.hostname.replace(/^www\./, ''), path = u.pathname;
+  if (host === 'docs.google.com') {
+    if (path.startsWith('/document')) return 'Google Doc';
+    if (path.startsWith('/spreadsheets')) return 'Google Sheet';
+    if (path.startsWith('/presentation')) return 'Google Slides';
+    if (path.startsWith('/forms')) return 'Google Form';
+  }
+  if (host === 'drive.google.com') return 'Google Drive file';
+  const rest = path.replace(/\/$/, '');
+  const label = host + (rest.length > 1 ? rest : '');
+  return label.length > 42 ? label.slice(0, 40) + '…' : label;
+}
+
+function linkButton(links, taskId, subId) {
+  const n = (links || []).length;
+  return `<button class="link-btn${n ? ' has-links' : ''}" data-task="${taskId}"${subId ? ` data-sub="${subId}"` : ''}
+    title="${n ? `${n} link${n > 1 ? 's' : ''}` : 'Add a link'}">${CLIP_ICON}${n > 1 ? `<small>${n}</small>` : ''}</button>`;
+}
+
+// The links panel, opened from a row's paperclip
+const linkPanel = document.getElementById('linkPanel');
+let linkOwner = null; // { task, sub } whose links are shown
+const ownerOf = key => {
+  const t = tasks.find(t => t.id === key.task);
+  return key.sub ? t.subtasks.find(s => s.id === key.sub) : t;
+};
+
+function openLinks(key, anchor) {
+  linkOwner = key;
+  drawLinkPanel();
+  linkPanel.hidden = false;
+  // Place it under the paperclip, kept inside the window
+  const r = anchor.getBoundingClientRect(), w = linkPanel.offsetWidth, h = linkPanel.offsetHeight;
+  linkPanel.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  linkPanel.style.top = (r.bottom + 6 + h > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+  document.getElementById('linkInput').focus();
+}
+function closeLinks() { linkPanel.hidden = true; linkOwner = null; }
+
+function drawLinkPanel() {
+  const item = ownerOf(linkOwner), links = item.links || [];
+  document.getElementById('linkTitle').textContent = `Links · ${item.name}`;
+  document.getElementById('linkList').innerHTML = links.length
+    ? links.map((l, i) => `<li>${CLIP_ICON}<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="${esc(l.url)}">${esc(linkLabel(l.url))}</a>
+        <button class="link-remove" data-index="${i}" title="Remove link">✕</button></li>`).join('')
+    : '<li class="empty">No links yet</li>';
+  document.getElementById('linkError').textContent = '';
+}
+
+document.getElementById('linkForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const input = document.getElementById('linkInput');
+  const url = normalizeUrl(input.value);
+  if (!url) { document.getElementById('linkError').textContent = 'That doesn\'t look like a web link.'; return; }
+  const item = ownerOf(linkOwner);
+  (item.links ||= []).push({ url });
+  input.value = '';
+  save(); render(); drawLinkPanel();
+});
+document.getElementById('linkList').addEventListener('click', e => {
+  const btn = e.target.closest('.link-remove');
+  if (!btn) return;
+  ownerOf(linkOwner).links.splice(+btn.dataset.index, 1);
+  save(); render(); drawLinkPanel();
+});
+document.getElementById('linkClose').onclick = closeLinks;
+document.addEventListener('pointerdown', e => {
+  if (!linkPanel.hidden && !linkPanel.contains(e.target) && !e.target.closest('.link-btn')) closeLinks();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !linkPanel.hidden) closeLinks(); });
 
 // ---- Renaming in place (in the list) ----
 // Press on a name in the list (group, task or subtask) to rename it: Enter or
@@ -1412,6 +1513,7 @@ function render() {
           ${t.milestone ? `<i class="ms-icon" title="Milestone at ${t.milestone}"></i>` : ''}
           <span class="name">${esc(t.name)}</span>
           ${subs.length ? `<small class="sub-count" title="Subtasks done">${doneSubs}/${subs.length}</small>` : ''}
+          ${linkButton(t.links, t.id)}
           <button class="sub-add-btn" data-task="${t.id}" title="Add subtask">+</button>
           <button onclick="removeTask('${t.id}')" title="Delete">✕</button>
         </div>`;
@@ -1429,6 +1531,7 @@ function render() {
           labels += `<div class="row sub-row${grouped}" ${rowGroup} style="${colorVars}">
             <input type="checkbox" class="sub-done" data-task="${t.id}" data-sub="${s.id}" ${s.done ? 'checked' : ''}>
             <span class="name${s.done ? ' sub-checked' : ''}" data-task="${t.id}" data-sub="${s.id}" title="Click to rename">${esc(s.name)}</span>
+            ${linkButton(s.links, t.id, s.id)}
             <button class="sub-remove" data-task="${t.id}" data-sub="${s.id}" title="Delete subtask">✕</button>
           </div>`;
         }

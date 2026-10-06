@@ -6,7 +6,7 @@
 <title>Simple Gantt</title>
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever styles.css or app.js changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-04.9">
+<link rel="stylesheet" href="styles.css?v=2026-10-06.3">
 </head>
 <body>
 <main>
@@ -105,12 +105,23 @@
   </form>
 </dialog>
 
+<!-- Links panel, opened from a task's or subtask's paperclip (filled by app.js) -->
+<div id="linkPanel" class="link-panel" role="dialog" aria-labelledby="linkTitle" hidden>
+  <div class="link-head"><h2 id="linkTitle">Links</h2><button id="linkClose" title="Close">✕</button></div>
+  <ul id="linkList"></ul>
+  <form id="linkForm">
+    <input id="linkInput" type="text" inputmode="url" autocomplete="off" placeholder="Paste a link (Google Doc, website…)">
+    <button class="primary">Add</button>
+  </form>
+  <div class="error" id="linkError"></div>
+</div>
+
 <!-- "Coming up": tasks starting today and later this week (filled by app.js) -->
 <aside id="notice" class="notice" role="status" aria-live="polite" hidden></aside>
 
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-04.9"></script>
+<script src="app.js?v=2026-10-06.2"></script>
 </body>
 </html>

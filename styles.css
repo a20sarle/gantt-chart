@@ -309,3 +309,32 @@
   .notice h2 { font-size: 13px; margin: 0 0 4px; }
   .notice ul { margin: 0 0 10px; padding-left: 18px; font-size: 13px; }
   .notice .actions { display: flex; justify-content: flex-end; }
+
+  /* Paperclip on task and subtask rows: always shown once there are links,
+     otherwise only while hovering the row (or faintly on touch screens) */
+  .labels .row .link-btn { display: inline-flex; align-items: center; gap: 1px; padding: 0 3px; flex: none; opacity: 0; }
+  .labels .row:hover .link-btn, .labels .row .link-btn:focus-visible { opacity: .5; }
+  .labels .row .link-btn.has-links { opacity: 1; }
+  .labels .row .link-btn small { font-size: 10px; font-weight: 700; }
+  @media (hover: none) { .labels .row .link-btn { opacity: .4; } .labels .row .link-btn.has-links { opacity: 1; } }
+
+  /* The links panel */
+  .link-panel { position: fixed; z-index: 40; width: min(340px, calc(100vw - 16px)); padding: 12px 14px;
+                background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+                box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  .link-panel[hidden] { display: none; }
+  .link-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .link-head h2 { flex: 1; font-size: 14px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-head button, .link-panel .link-remove { border: none; background: none; padding: 2px 6px; color: var(--muted); }
+  .link-panel ul { list-style: none; margin: 0 0 10px; padding: 0; }
+  .link-panel li { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .link-panel li.empty { color: var(--muted); }
+  .link-panel li a { flex: 1; min-width: 0; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-panel form { display: flex; gap: 6px; }
+  .link-panel form input { flex: 1; min-width: 0; }
+
+  /* The + (add subtask) button: only shown while hovering the row (faintly on
+     touch screens, which have no hover) */
+  .labels .row .sub-add-btn { opacity: 0; }
+  .labels .row:hover .sub-add-btn, .labels .row .sub-add-btn:focus-visible { opacity: .7; }
+  @media (hover: none) { .labels .row .sub-add-btn { opacity: .4; } }

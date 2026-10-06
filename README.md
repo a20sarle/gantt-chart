@@ -101,6 +101,14 @@ Click **Apply** to do both, or **Cancel** to move nothing else.
 - **Completed tasks** (every subtask ticked, or the status circle clicked) are greyed out, in both the list and the chart.
 - The app remembers which subtask lists are open.
 
+### Links 📎
+Tasks and subtasks can have links: a Google Doc, a website, anything on the web.
+
+- Hover a row in the list and click its **paperclip**, paste a link and press **Enter** (or **Add**). A row with links always shows its paperclip, with the number of links when there's more than one.
+- In the panel, click a link to open it in a new tab, or **✕** to remove it.
+- Google links get readable names (Google Doc, Google Sheet, Google Slides, Google Drive file); other links show the site's address.
+- The calendar export lists the links in each event's description, where Google Calendar makes them clickable, and also adds them as attachments, which Outlook and Apple Calendar show. (Google Calendar doesn't import attachments from `.ics` files.)
+
 ### Milestones ◆
 Set **Milestone** to **At start** or **At end** to mark a task as a milestone.
 A diamond appears at that end of its bar in the chart, and before its name in
@@ -140,7 +148,7 @@ as they are on screen, so collapse or open them first to choose what's included.
 **Export ▾ → Calendar (.ics)** downloads a calendar file of the project:
 
 - every task as an **all-day event** from its start to its end date (finished tasks get a ✓ in front);
-- its group, progress, subtasks (✓ / ☐) and the tasks it starts after in the event's description;
+- its group, progress, subtasks (✓ / ☐), links and the tasks it starts after in the event's description (links are clickable in Google Calendar, and also added as attachments for Outlook and Apple Calendar);
 - every **milestone** as its own one-day event, e.g. "◆ Review".
 
 To add it to Google Calendar (on a computer):
