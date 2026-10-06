@@ -381,24 +381,58 @@
     .labels .row:has(.renaming) .reveal, .labels .row:has(.renaming) .sub-count { display: none; }
   }
 
-  /* ---- Phones: Schedule view and the chart without its list ---- */
-  .phone-only, #schedule, .gname-on-chart { display: none; }
+  /* ---- Phones: Schedule view, or the Chart turned ---- */
+  .phone-only, #schedule, #turned { display: none; }
   @media (max-width: 640px) {
     .phone-only { display: inline-flex; }
-    html:not(.phone-chart) #listBtn { display: none; }
     /* Schedule: the chart and its view buttons step aside */
     html.phone-schedule #chart, html.phone-schedule #viewBtns, html.phone-schedule #collapseAllBtn { display: none !important; }
     html:not(.phone-schedule) #schedTodayBtn { display: none; }
     html.phone-schedule #schedule { display: block; flex: 1; min-height: 0; overflow-y: auto; }
-    /* Chart with the list hidden: the timeline gets the whole width */
-    html.list-hidden { --labels-w: 0px; }
-    html.list-hidden #chart .labels { visibility: hidden; overflow: hidden; border: 0; }
-    /* Group names on the chart's group rows; they stay at the left edge while the group scrolls past */
-    html.list-hidden #chart .gname-on-chart { display: inline-block; position: sticky; left: 4px; top: 0; padding-top: 1px;
-                                       font-size: 11px; font-weight: 700; color: var(--bar); white-space: nowrap;
-                                       pointer-events: none; z-index: 2; }
-    html.list-hidden #chart .group-bar { top: 18px; height: 6px; }
+    /* Chart: the turned chart instead of the normal one */
+    html.phone-chart #chart { display: none !important; }
+    html.phone-chart #turned { display: block; flex: 1; min-height: 0; overflow: auto; touch-action: pan-x pan-y; }
   }
+
+  /* The turned chart: header (110px) at the top, dates (58px) at the left */
+  .t-canvas { position: relative; min-width: 100%; }
+  .t-head { position: sticky; top: 0; z-index: 5; display: flex; height: 110px; background: var(--panel);
+            border-bottom: 1px solid var(--line); }
+  .t-corner { position: sticky; left: 0; z-index: 6; flex: none; width: 58px; background: var(--panel);
+              border-right: 1px solid var(--line); }
+  .t-cols { display: flex; flex-direction: column; }
+  .t-groups { display: flex; flex: none; height: 22px; }
+  .t-group { flex: none; padding: 3px 5px; background: var(--bar); color: var(--bar-text); font-size: 11px; font-weight: 700;
+             overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-right: 1px solid var(--panel); cursor: pointer; }
+  .t-names { display: flex; flex: 1; min-height: 0; }
+  .t-name { flex: none; display: flex; justify-content: center; padding: 6px 0; overflow: hidden; cursor: pointer;
+            background: color-mix(in srgb, var(--bar) 40%, #fff); color: #1d1d1f; border-right: 1px solid var(--panel); }
+  .t-name span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; font-weight: 600;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100%; }
+  .t-name.done, .t-bar.done { filter: grayscale(1); opacity: .55; }
+  .t-body { position: relative; }
+  .t-body.day-lines { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--day) - 1px),
+                      var(--line) calc(var(--day) - 1px), var(--line) var(--day)); }
+  .t-dates { position: sticky; left: 0; z-index: 3; width: 58px; height: 100%; background: var(--panel);
+             border-right: 1px solid var(--line); }
+  .t-date { position: absolute; left: 0; right: 0; display: flex; align-items: center; padding: 0 6px;
+            font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .t-date.weekend { background: var(--weekend); }
+  .t-date b { color: var(--text); }
+  .t-weekend { position: absolute; left: 0; right: 0; background: var(--weekend); }
+  .t-week-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--muted) 35%, var(--line)); }
+  .t-month-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--muted) 70%, var(--line)); }
+  .t-today { position: absolute; left: 0; right: 0; height: 2px; background: var(--today); z-index: 2; }
+  .t-bar { position: absolute; z-index: 1; min-height: 3px; border-radius: 4px; cursor: pointer;
+           background: color-mix(in srgb, var(--bar) 40%, #fff); }
+  .t-bar.t-groupbar { background: var(--bar); opacity: .7; }
+  .t-progress { position: absolute; left: 0; right: 0; top: 0; border-radius: inherit; pointer-events: none;
+                background: color-mix(in srgb, var(--bar) 75%, #fff); }
+  .t-ms { position: absolute; left: 50%; width: 12px; height: 12px; background: var(--bar); border: 2px solid var(--panel);
+          transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; }
+  .t-ms.start { top: 0; }
+  .t-ms.end { top: 100%; }
+
   #schedule h3 { position: sticky; top: 0; z-index: 2; margin: 0; padding: 10px 2px 6px; font-size: 13px;
                  background: var(--panel); color: var(--muted); }
   #schedule .sched-week.current h3 { color: var(--accent); }

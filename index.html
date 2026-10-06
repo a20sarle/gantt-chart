@@ -6,7 +6,7 @@
 <title>Simple Gantt</title>
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever styles.css or app.js changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-06.9">
+<link rel="stylesheet" href="styles.css?v=2026-10-06.10">
 </head>
 <body>
 <main>
@@ -54,7 +54,6 @@
         <button data-phone="schedule">Schedule</button>
         <button data-phone="chart">Chart</button>
       </div>
-      <button id="listBtn" class="phone-only" title="Show or hide the task list">☰ List</button>
       <button id="schedTodayBtn" class="phone-only" title="Go to this week">Today</button>
       <button id="collapseAllBtn" hidden>Collapse all</button>
       <span class="spacer"></span>
@@ -76,6 +75,8 @@
     <div id="chart"></div>
     <!-- Phones: tasks as a list by week, scrolled downwards (filled by app.js) -->
     <div id="schedule"></div>
+    <!-- Phones: the chart turned a quarter, time running down (filled by app.js) -->
+    <div id="turned"></div>
   </section>
 </main>
 
@@ -133,6 +134,6 @@
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-06.9"></script>
+<script src="app.js?v=2026-10-06.11"></script>
 </body>
 </html>
