@@ -6,7 +6,7 @@
 <title>Simple Gantt</title>
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever styles.css or app.js changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-06.12">
+<link rel="stylesheet" href="styles.css?v=2026-10-06.13">
 </head>
 <body>
 <main>
@@ -95,7 +95,7 @@
 </dialog>
 
 <!-- Phones: everything about one task, slid up from the bottom (filled by app.js) -->
-<dialog id="taskSheet" class="sheet" aria-label="Task"><div id="sheetBody"></div></dialog>
+<dialog id="taskSheet" class="sheet" aria-label="Task"><div id="sheetBody" tabindex="-1"></div></dialog>
 
 <dialog id="confirmDialog">
   <form method="dialog">
@@ -138,6 +138,6 @@
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-06.12"></script>
+<script src="app.js?v=2026-10-06.13"></script>
 </body>
 </html>

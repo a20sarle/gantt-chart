@@ -397,21 +397,27 @@
   /* The turned chart: dates (58px) at the left, one column per task */
   .t-canvas { position: relative; min-width: 100%; }
   .t-body { position: relative; }
-  .t-body.day-lines { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--day) - 1px),
-                      var(--line) calc(var(--day) - 1px), var(--line) var(--day)); }
   .t-dates { position: sticky; left: 0; z-index: 3; width: 58px; height: 100%; background: var(--panel);
              border-right: 1px solid var(--line); }
   .t-date { position: absolute; left: 0; right: 0; display: flex; align-items: center; padding: 0 6px;
             font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
   .t-date.weekend { background: var(--weekend); }
-  .t-date b { color: var(--text); }
-  .t-weekend { position: absolute; left: 0; right: 0; background: var(--weekend); }
-  .t-week-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--muted) 35%, var(--line)); }
-  .t-month-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--muted) 70%, var(--line)); }
+  /* Day rows, and the bands where a quarter / month / week begins */
+  .t-row { position: absolute; left: 0; right: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  .t-row.weekend { background: var(--weekend); }
+  .t-band { position: absolute; left: 0; right: 0; background: color-mix(in srgb, var(--muted) 7%, var(--panel));
+            border-top: 1px solid color-mix(in srgb, var(--muted) 35%, var(--line)); }
+  .t-band.m { border-top-color: color-mix(in srgb, var(--muted) 70%, var(--line)); }
+  .t-band.q { border-top: 2px solid var(--text); }
+  .t-band-label { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; justify-content: center;
+                  padding: 0 6px; font-size: 11px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden;
+                  background: color-mix(in srgb, var(--muted) 7%, var(--panel)); }
+  .t-band-label b { color: var(--text); }
   .t-today { position: absolute; left: 0; right: 0; height: 2px; background: var(--today); z-index: 2; }
+  /* A group's line, in its own thin column */
+  .t-gline { position: absolute; z-index: 1; width: 6px; border-radius: 3px; background: var(--bar); opacity: .7; cursor: pointer; }
   .t-bar { position: absolute; z-index: 1; min-height: 3px; border-radius: 4px; cursor: pointer;
            background: color-mix(in srgb, var(--bar) 40%, #fff); }
-  .t-bar.t-groupbar { background: var(--bar); opacity: .7; }
   .t-progress { position: absolute; left: 0; right: 0; top: 0; border-radius: inherit; pointer-events: none;
                 background: color-mix(in srgb, var(--bar) 75%, #fff); }
   .t-ms { position: absolute; left: 50%; width: 12px; height: 12px; background: var(--bar); border: 2px solid var(--panel);
@@ -424,7 +430,6 @@
              writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; font-weight: 600; color: #1d1d1f;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
   .t-label small { font-weight: 500; opacity: .8; }
-  .t-bar.t-groupbar .t-label { color: var(--bar-text, #fff); }
   #turned { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   /* The outline drawn while pressing and dragging to create a task */
   .t-ghost { position: absolute; z-index: 4; border: 2px dashed var(--accent); border-radius: 4px; pointer-events: none;
@@ -496,3 +501,9 @@
   .sched-sub a, .sched-link { color: var(--accent); font-size: 13px; }
   .sched-edit { align-self: flex-start; margin-top: 4px; font-size: 13px; padding: 6px 10px; }
   .sched-empty { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+
+  /* Sheet: details look like plain text until tapped */
+  #sheetBody:focus { outline: none; }
+  .sheet-grid input, .sheet-grid select { border-color: transparent; background: transparent; padding: 3px 0; font-size: 15px; color: var(--text); }
+  .sheet-grid input:focus, .sheet-grid select:focus { border-color: var(--accent); background: var(--bg); padding: 3px 6px; }
+  .sheet-adder { border: none; background: none; color: var(--accent); padding: 6px 0; font-size: 14px; }

@@ -339,6 +339,17 @@ const TURNED_HEAD = 0, TURNED_DATES = 58;        // no header; date column width
 const timeLength = () => turnedOn() ? turnedEl.clientHeight - TURNED_HEAD : chartEl.clientWidth - labelsW();
 const getTimeScroll = () => turnedOn() ? turnedEl.scrollTop : chartEl.scrollLeft;
 const setTimeScroll = px => { if (turnedOn()) turnedEl.scrollTop = px; else chartEl.scrollLeft = px; };
+// The (fractional) day at the start of the visible timeline, and scrolling to a
+// day (minus `offset` px). The turned chart has its own day <-> position map.
+const useTurnedMap = () => turnedOn() && turnedMap;
+const getScrollDay = () => useTurnedMap() ? turnedDayAtY(turnedEl.scrollTop) : dayNumber(chartStart) + chartEl.scrollLeft / renderedDayW;
+function scrollToDay(day, offset = 0) {
+  if (useTurnedMap()) turnedEl.scrollTop = turnedYOfDay(day) - offset;
+  else chartEl.scrollLeft = (day - dayNumber(chartStart)) * renderedDayW - offset;
+}
+// The zoom (px per day) that fits `days` days from `startDay` on screen
+// (in the turned chart, the bands for new weeks/months/quarters take room too)
+const fitZoom = (startDay, days) => (timeLength() - (turnedOn() ? turnedBandsBetween(startDay, startDay + days - 1) : 0)) / days;
 const maxDayW = () => Math.max(60, timeLength());
 let zoom = 28;
 try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= MIN_DAY_W && z <= 5000) zoom = z; } catch {}
@@ -386,8 +397,8 @@ function openView(v, date) {
   viewDate = date;
   viewRange = p;
   const days = daysBetween(parse(p.start), parse(p.end)) + 1;
-  setZoom(timeLength() / days, { keepView: true });
-  setTimeScroll(daysBetween(chartStart, parse(p.start)) * renderedDayW);
+  setZoom(fitZoom(dayNumber(parse(p.start)), days), { keepView: true });
+  scrollToDay(dayNumber(parse(p.start)));
   tidyHeaderLabels();
 }
 
@@ -411,8 +422,7 @@ document.getElementById('nextBtn').onclick = () => step(1);
 // Scrolls the chart so today sits a little in from the left edge of the timeline
 function scrollToToday() {
   if (!timelineEl()) return;
-  const x = daysBetween(chartStart, parse(todayString())) * renderedDayW;
-  setTimeScroll(Math.max(0, x - timeLength() / 4));
+  scrollToDay(dayNumber(parse(todayString())), timeLength() / 4);
 }
 // Today: today's period in Day / Week / Month / Quarter, otherwise scroll to today
 document.getElementById('todayBtn').onclick = () =>
@@ -427,16 +437,16 @@ document.getElementById('overviewBtn').onclick = () => {
   if (overviewReturn) {
     const back = overviewReturn;
     setZoom(back.dayW); // also clears overviewReturn
-    setTimeScroll((back.leftDay - dayNumber(chartStart)) * renderedDayW);
+    scrollToDay(back.leftDay);
     chartEl.scrollTop = back.top;
     return render(); // refresh the button
   }
   if (!tasks.length) return;
-  const back = { dayW: renderedDayW, leftDay: dayNumber(chartStart) + getTimeScroll() / renderedDayW, top: chartEl.scrollTop };
+  const back = { dayW: renderedDayW, leftDay: getScrollDay(), top: chartEl.scrollTop };
   const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
   const days = daysBetween(first, last) + 1 + 2; // the project plus a day either side
-  setZoom(timeLength() / days); // setZoom keeps it within the zoom limits
-  setTimeScroll(daysBetween(chartStart, first - DAY) * renderedDayW);
+  setZoom(fitZoom(dayNumber(first) - 1, days)); // setZoom keeps it within the zoom limits
+  scrollToDay(dayNumber(first) - 1);
   chartEl.scrollTop = 0;
   overviewReturn = back;
   render(); // refresh the button
@@ -724,15 +734,50 @@ scheduleEl.addEventListener('change', e => {
 // ---- Phones: the Chart turned a quarter (time runs down) ----
 // On a phone, Chart shows the Gantt chart turned: dates run down the left side
 // (staying in place while scrolling sideways) and each task is a vertical bar
-// in its own column, with its name written inside, so swiping up/down moves
-// through time. It uses the same zoom (the height of one day) and the same
-// Day/Week/Month/Quarter, ‹ ›, Today and Overview buttons; a pinch zooms.
-// Tap a bar to open the task sheet; press and hold an empty spot, then drag,
-// to create a task.
-let turnedCols = [], turnedColW = 40; // the groups of the columns, and their width (for creating tasks)
+// in its own column with its name written inside; each group has a thin column
+// with a line over the group's dates. Swiping up/down moves through time.
+// Wherever a quarter, month or week begins, a band shows that information
+// stacked ("Q4 · Oct 2026 · Week 40"); every day row is tall enough for its
+// label, so the days aren't evenly spaced: turnedMap translates between days
+// and positions. Tap a bar to open the task sheet; press and hold an empty
+// spot, then drag, to create a task.
+const TURNED_MIN_ROW = 16, BAND_LINE = 14, GROUP_COL = 16;
+let turnedMap = null;  // { startDay, rowTop: [], bandTop: [], H, height }
+let turnedCols = [];   // [{ x, w, g }] for creating tasks
 
-function renderTurned(min, totalDays, H, todayDate) {
+// The lines of the band above a day: Q (quarter starts), month (month starts), week (Mondays)
+function turnedBandLines(d, first) {
+  const lines = [], day1 = d.getUTCDate() === 1;
+  if (first || (day1 && d.getUTCMonth() % 3 === 0)) lines.push(`<b>Q${Math.floor(d.getUTCMonth() / 3) + 1}</b>`);
+  if (first || day1) lines.push(d.toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' }));
+  if (first || d.getUTCDay() === 1) lines.push(`Week ${isoWeek(d)}`);
+  return lines;
+}
+const bandHeight = n => n ? n * BAND_LINE + 6 : 0;
+// Total band height between two days (both included), for fitting a period on screen
+function turnedBandsBetween(a, b) {
+  let h = 0;
+  for (let n = a; n <= b; n++) h += bandHeight(turnedBandLines(new Date(n * DAY), false).length);
+  return h;
+}
+
+// Day number (may be fractional) <-> position from the top of the chart.
+// A whole day maps to the top of its band, so scrolling to it shows its band.
+function turnedYOfDay(day) {
+  const m = turnedMap, i = Math.max(0, Math.min(m.rowTop.length - 1, Math.floor(day - m.startDay))), f = day - m.startDay - i;
+  return f <= 0 ? m.bandTop[i] : m.rowTop[i] + Math.min(1, f) * m.H;
+}
+function turnedDayAtY(y) {
+  const m = turnedMap;
+  let lo = 0, hi = m.rowTop.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (m.bandTop[mid] <= y) lo = mid; else hi = mid - 1; }
+  return m.startDay + lo + Math.max(0, Math.min(1, (y - m.rowTop[lo]) / m.H));
+}
+const turnedRowTop = day => turnedMap.rowTop[Math.max(0, Math.min(turnedMap.rowTop.length - 1, day - turnedMap.startDay))];
+
+function renderTurned(min, totalDays, zoomH, todayDate) {
   if (!turnedOn() || exportOpts) return;
+  const H = Math.max(TURNED_MIN_ROW, zoomH);
   syncGroupColors();
   const colour = g => g ? PALETTE[groupColors[g]] || UNGROUPED_COLOR : UNGROUPED_COLOR;
   const sorted = [...tasks].sort((a, b) => a.start.localeCompare(b.start));
@@ -741,62 +786,76 @@ function renderTurned(min, totalDays, H, todayDate) {
   const order = [...displayedGroups.filter(g => groups.has(g)), ...(groups.has('') ? [''] : [])];
   const hasGroups = displayedGroups.length > 0;
 
-  // One column per task; a collapsed group is a single column
-  const cols = [];
-  for (const g of order) {
-    if (hasGroups && collapsed.has(g)) cols.push({ g, list: groups.get(g) });
-    else groups.get(g).forEach(t => cols.push({ g, t }));
+  // Rows: a band (if a quarter/month/week begins) then the day itself
+  const rowTop = [], bandTop = [], bandLines = [];
+  let yPos = 0;
+  for (let i = 0; i < totalDays; i++) {
+    const lines = turnedBandLines(new Date(+min + i * DAY), i === 0);
+    bandTop.push(yPos); bandLines.push(lines);
+    yPos += bandHeight(lines.length);
+    rowTop.push(yPos);
+    yPos += H;
   }
-  const colW = Math.max(36, Math.min(72, Math.floor((turnedEl.clientWidth - TURNED_DATES) / Math.max(1, cols.length))));
-  turnedCols = cols.map(c => c.g);
-  turnedColW = colW;
-  const y = s => daysBetween(min, parse(s)) * H;
+  turnedMap = { startDay: dayNumber(min), rowTop, bandTop, H, height: yPos };
+  const topOf = s => turnedRowTop(dayNumber(parse(s)));
+  const bottomOf = s => turnedRowTop(dayNumber(parse(s))) + H;
 
-  let bars = '';
-  cols.forEach((col, i) => {
-    const x = TURNED_DATES + i * colW, c = colour(col.g);
-    if (col.t) {
-      const t = col.t, pct = progressOf(t), done = pct === 100 ? ' done' : '';
-      const len = daysBetween(parse(t.start), parse(t.end)) + 1;
+  // Columns: per group a thin column with its line, then a column per task
+  // (a collapsed group shows only its line)
+  const groupCols = hasGroups ? order.length : 0;
+  const taskCols = order.reduce((n, g) => n + (hasGroups && collapsed.has(g) ? 0 : groups.get(g).length), 0);
+  const colW = Math.max(36, Math.min(72, Math.floor((turnedEl.clientWidth - TURNED_DATES - groupCols * GROUP_COL) / Math.max(1, taskCols))));
+  let x = TURNED_DATES, bars = '';
+  turnedCols = [];
+  for (const g of order) {
+    const list = groups.get(g), c = colour(g);
+    if (hasGroups) {
+      const s = list[0].start, e = list.reduce((m, t) => t.end > m ? t.end : m, list[0].end);
+      bars += `<div class="t-gline" data-toggle="${esc(g)}" style="left:${x + 5}px;top:${topOf(s)}px;height:${bottomOf(e) - topOf(s)}px;--bar:${c.bg}"
+        title="${esc(groupLabel(g))}: ${s} → ${e}${collapsed.has(g) ? ` (${list.length} tasks hidden)` : ''}"></div>`;
+      turnedCols.push({ x, w: GROUP_COL, g });
+      x += GROUP_COL;
+      if (collapsed.has(g)) continue;
+    }
+    for (const t of list) {
+      const pct = progressOf(t), done = pct === 100 ? ' done' : '';
       const extras = [(t.subtasks || []).length ? `${pct}%` : '', (t.links || []).length ? '📎' : ''].filter(Boolean).join(' ');
-      bars += `<div class="t-bar${done}" data-id="${t.id}" style="left:${x + 4}px;width:${colW - 8}px;top:${y(t.start)}px;height:${len * H}px;--bar:${c.bg}"
+      bars += `<div class="t-bar${done}" data-id="${t.id}" style="left:${x + 4}px;width:${colW - 8}px;top:${topOf(t.start)}px;height:${bottomOf(t.end) - topOf(t.start)}px;--bar:${c.bg}"
         title="${esc(t.name)}: ${t.start} → ${t.end}">
         <span class="t-progress" style="height:${pct}%"></span>
         <span class="t-label">${esc(t.name)}${extras ? `<small> ${extras}</small>` : ''}</span>
         ${t.milestone ? `<i class="t-ms ${t.milestone}"></i>` : ''}</div>`;
-    } else { // a collapsed group: its whole span
-      const s = col.list[0].start, e = col.list.reduce((m, t) => t.end > m ? t.end : m, col.list[0].end);
-      bars += `<div class="t-bar t-groupbar" style="left:${x + 4}px;width:${colW - 8}px;top:${y(s)}px;height:${(daysBetween(parse(s), parse(e)) + 1) * H}px;--bar:${c.bg}">
-        <span class="t-label">${esc(groupLabel(col.g))} (${col.list.length})</span></div>`;
+      turnedCols.push({ x, w: colW, g });
+      x += colW;
     }
-  });
+  }
 
-  // Dates down the left: every day when there's room, otherwise weeks; months marked
-  let dates = '', lines = '';
+  // Bands, day rows (weekends shaded) and their labels in the date column
+  let dates = '', rows = '';
   for (let i = 0; i < totalDays; i++) {
-    const d = new Date(+min + i * DAY), dow = d.getUTCDay(), top = i * H, first = d.getUTCDate() === 1;
-    if (dow === 0 || dow === 6) lines += `<div class="t-weekend" style="top:${top}px;height:${H}px"></div>`;
-    if (dow === 1) lines += `<div class="t-week-line" style="top:${top}px"></div>`;
-    if (first) lines += `<div class="t-month-line" style="top:${top}px"></div>`;
-    let label = '';
-    if (H >= 16) label = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', ...(first || i === 0 ? { month: 'short' } : {}), timeZone: 'UTC' });
-    else if (first && H * 7 >= 14) label = `<b>${d.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' })}</b>`;
-    else if (dow === 1 && H * 7 >= 14) label = `W${isoWeek(d)}`;
-    if (label) dates += `<div class="t-date${dow === 0 || dow === 6 ? ' weekend' : ''}" style="top:${top}px;height:${Math.max(H, 14)}px">${label}</div>`;
+    const d = new Date(+min + i * DAY), dow = d.getUTCDay(), weekend = dow === 0 || dow === 6 ? ' weekend' : '';
+    if (bandLines[i].length) {
+      const kind = bandLines[i][0].startsWith('<b>Q') ? ' q' : d.getUTCDate() === 1 ? ' m' : '';
+      rows += `<div class="t-band${kind}" style="top:${bandTop[i]}px;height:${rowTop[i] - bandTop[i]}px"></div>`;
+      dates += `<div class="t-band-label" style="top:${bandTop[i]}px;height:${rowTop[i] - bandTop[i]}px">${bandLines[i].map(l => `<span>${l}</span>`).join('')}</div>`;
+    }
+    rows += `<div class="t-row${weekend}" style="top:${rowTop[i]}px;height:${H}px"></div>`;
+    dates += `<div class="t-date${weekend}" style="top:${rowTop[i]}px;height:${H}px">${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })}</div>`;
   }
   const todayAt = daysBetween(min, todayDate);
-  const today = todayAt >= 0 && todayAt < totalDays ? `<div class="t-today" style="top:${todayAt * H + H / 2 - 1}px"></div>` : '';
+  const today = todayAt >= 0 && todayAt < totalDays ? `<div class="t-today" style="top:${rowTop[todayAt] + H / 2 - 1}px"></div>` : '';
 
-  const width = TURNED_DATES + cols.length * colW;
-  turnedEl.innerHTML = `<div class="t-canvas" style="width:${width}px">
-    <div class="t-body${H >= 10 ? ' day-lines' : ''}" style="height:${totalDays * H}px;--day:${H}px">
-      <div class="t-dates">${dates}</div>${lines}${today}${bars}
+  turnedEl.innerHTML = `<div class="t-canvas" style="width:${x}px">
+    <div class="t-body" style="height:${yPos}px">
+      <div class="t-dates">${dates}</div>${rows}${today}${bars}
     </div></div>`;
 }
 
-// Tap a bar: the task sheet
+// Tap a bar: the task sheet. Tap a group's line: collapse or expand the group.
 turnedEl.addEventListener('click', e => {
   if (turnedPress?.done) { turnedPress = null; return; } // the end of a press-and-drag isn't a tap
+  const line = e.target.closest('.t-gline[data-toggle]');
+  if (line) return toggleGroup(line.dataset.toggle);
   const bar = e.target.closest('.t-bar[data-id]');
   if (bar) openTaskSheet(bar.dataset.id);
 });
@@ -805,34 +864,37 @@ turnedEl.addEventListener('contextmenu', e => e.preventDefault()); // a long pre
 // Press and hold an empty spot, then drag up/down: create a task over those days.
 // Moving before the hold is complete is an ordinary scroll.
 const HOLD_MS = 450;
-let turnedPress = null; // { x, y, timer, active, done, day0, col, created }
-const turnedBody = () => turnedEl.querySelector('.t-body');
-const dayAtY = clientY => Math.floor(dayNumber(chartStart) + (clientY - turnedBody().getBoundingClientRect().top) / renderedDayW);
+let turnedPress = null; // { x, y, timer, active, done, day0, day1, g, colX, colW, created }
+const turnedBodyTop = () => turnedEl.querySelector('.t-body').getBoundingClientRect().top;
+const turnedDayAtClientY = clientY => Math.floor(turnedDayAtY(clientY - turnedBodyTop()));
 
 function drawTurnedGhost() {
   const p = turnedPress, a = Math.min(p.day0, p.day1), b = Math.max(p.day0, p.day1);
   p.created = { start: dayString(a), end: dayString(b) };
   let ghost = turnedEl.querySelector('.t-ghost');
-  if (!ghost) { ghost = document.createElement('div'); ghost.className = 't-ghost'; turnedBody().appendChild(ghost); }
-  ghost.style.left = TURNED_DATES + Math.max(0, p.col) * turnedColW + 2 + 'px';
-  ghost.style.width = turnedColW - 4 + 'px';
-  ghost.style.top = (a - dayNumber(chartStart)) * renderedDayW + 'px';
-  ghost.style.height = (b - a + 1) * renderedDayW + 'px';
+  if (!ghost) { ghost = document.createElement('div'); ghost.className = 't-ghost'; turnedEl.querySelector('.t-body').appendChild(ghost); }
+  ghost.style.left = p.colX + 2 + 'px';
+  ghost.style.width = Math.max(30, p.colW - 4) + 'px';
+  ghost.style.top = turnedRowTop(a) + 'px';
+  ghost.style.height = turnedRowTop(b) + turnedMap.H - turnedRowTop(a) + 'px';
   ghost.innerHTML = `<span>${shortDate(p.created.start)}${a === b ? '' : ` → ${shortDate(p.created.end)}`}</span>`;
 }
 
 turnedEl.addEventListener('touchstart', e => {
   if (turnedPress) { clearTimeout(turnedPress.timer); turnedPress.active && turnedEl.querySelector('.t-ghost')?.remove(); turnedPress = null; }
-  if (e.touches.length !== 1 || e.target.closest('.t-bar')) return;
+  if (e.touches.length !== 1 || e.target.closest('.t-bar, .t-gline')) return;
   const t = e.touches[0];
   const p = turnedPress = { x: t.clientX, y: t.clientY, active: false, done: false };
   p.timer = setTimeout(() => {
     if (turnedPress !== p) return;
     p.active = true;
     navigator.vibrate?.(20);
-    const canvas = turnedEl.querySelector('.t-canvas').getBoundingClientRect();
-    p.col = Math.floor((p.x - canvas.left - TURNED_DATES) / turnedColW);
-    p.day0 = p.day1 = dayAtY(p.y);
+    const xIn = p.x - turnedEl.querySelector('.t-canvas').getBoundingClientRect().left;
+    const col = turnedCols.find(c => xIn >= c.x && xIn < c.x + c.w) || turnedCols[turnedCols.length - 1];
+    p.g = col ? col.g : null;
+    p.colX = col ? col.x : TURNED_DATES;
+    p.colW = col ? col.w : 40;
+    p.day0 = p.day1 = turnedDayAtClientY(p.y);
     drawTurnedGhost();
   }, HOLD_MS);
 }, { passive: true });
@@ -849,7 +911,7 @@ turnedEl.addEventListener('touchmove', e => {
   const r = turnedEl.getBoundingClientRect(), EDGE = 40;
   if (t.clientY > r.bottom - EDGE) turnedEl.scrollTop += 12;        // near the edges, scroll along
   else if (t.clientY < r.top + EDGE) turnedEl.scrollTop -= 12;
-  p.day1 = dayAtY(t.clientY);
+  p.day1 = turnedDayAtClientY(t.clientY);
   drawTurnedGhost();
 }, { passive: false });
 
@@ -861,8 +923,7 @@ turnedEl.addEventListener('touchend', () => {
   p.done = true; // so the click that may follow isn't taken as a tap
   setTimeout(() => { if (turnedPress === p) turnedPress = null; }, 400);
   turnedEl.querySelector('.t-ghost')?.remove();
-  const g = p.col >= 0 && p.col < turnedCols.length ? turnedCols[p.col] : null;
-  createTaskFromDrag({ created: p.created, rowGroup: g || null });
+  createTaskFromDrag({ created: p.created, rowGroup: p.g || null });
 });
 turnedEl.addEventListener('touchcancel', () => {
   if (!turnedPress) return;
@@ -876,44 +937,51 @@ let turnedPinch = null;
 turnedEl.addEventListener('touchstart', e => {
   if (e.touches.length !== 2) return;
   const [a, b] = e.touches;
-  turnedPinch = { gap: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), H: renderedDayW };
+  turnedPinch = { gap: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), H: turnedMap ? turnedMap.H : renderedDayW };
 }, { passive: true });
 turnedEl.addEventListener('touchmove', e => {
   if (!turnedPinch || e.touches.length !== 2) return;
   e.preventDefault();
   const [a, b] = e.touches;
-  const offset = (a.clientY + b.clientY) / 2 - turnedEl.getBoundingClientRect().top - TURNED_HEAD;
-  const day = dayNumber(chartStart) + (turnedEl.scrollTop + offset) / renderedDayW;
+  const offset = (a.clientY + b.clientY) / 2 - turnedEl.getBoundingClientRect().top;
+  const day = turnedDayAtY(turnedEl.scrollTop + offset);
   setZoom(turnedPinch.H * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / turnedPinch.gap);
-  turnedEl.scrollTop = (day - dayNumber(chartStart)) * renderedDayW - offset;
+  turnedEl.scrollTop = turnedYOfDay(day) - offset;
 }, { passive: false });
 turnedEl.addEventListener('touchend', e => { if (e.touches.length < 2) turnedPinch = null; });
 
 // ---- Task sheet (phones) ----
 // Everything about one task in a sheet that slides up: name, done or progress,
-// dates, group, milestone, links, and its subtasks (each with a tick box, an
-// editable name, its own links and ✕), plus adding subtasks and deleting the
-// task. Changes are saved straight away.
+// dates, group, milestone, links, and its subtasks (each with a tick box, a
+// name, its own links and ✕), plus adding subtasks and deleting the task.
+// It opens showing the information; tap something to change it. Changes are
+// saved straight away.
 const sheet = document.getElementById('taskSheet');
 const sheetBody = document.getElementById('sheetBody');
 let sheetTaskId = null;
 let sheetLinksFor = null; // the subtask whose links are shown under it
+let sheetAdding = null;   // what is being added: 'sub', 'link:task' or 'link:<subtask id>'
 
 function openTaskSheet(id) {
   sheetTaskId = id;
   sheetLinksFor = null;
+  sheetAdding = null;
   drawSheet();
   if (!sheet.open) sheet.showModal();
+  sheetBody.focus({ preventScroll: true }); // nothing selected, no keyboard
+  sheet.scrollTop = 0;
 }
 
 function sheetLinks(links, owner) {
+  const adding = sheetAdding === `link:${owner}`;
   return `<ul class="sheet-links">${(links || []).map((l, i) => `<li>${CLIP_ICON}
       <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(l.url))}</a>
       <button type="button" class="sheet-link-del" data-owner="${owner}" data-index="${i}" title="Remove link">✕</button></li>`).join('')}</ul>
-    <form class="sheet-add-link" data-owner="${owner}">
-      <input type="text" inputmode="url" autocomplete="off" placeholder="Paste a link (Google Doc, website…)">
-      <button class="primary">Add</button>
-    </form><div class="error"></div>`;
+    ${adding ? `<form class="sheet-add-link" data-owner="${owner}">
+        <input type="text" inputmode="url" autocomplete="off" placeholder="Paste a link (Google Doc, website…)">
+        <button class="primary">Add</button>
+      </form><div class="error"></div>`
+      : `<button type="button" class="sheet-adder" data-add="link:${owner}">+ Add link</button>`}`;
 }
 
 function drawSheet() {
@@ -950,7 +1018,9 @@ function drawSheet() {
         </div>
         ${sheetLinksFor === s.id ? `<div class="sheet-sub-linkbox">${sheetLinks(s.links, s.id)}</div>` : ''}
       </li>`).join('')}</ul>
-    <form class="sheet-add-sub"><input autocomplete="off" placeholder="Add a subtask…"><button class="primary">Add</button></form>
+    ${sheetAdding === 'sub'
+      ? `<form class="sheet-add-sub"><input autocomplete="off" placeholder="New subtask"><button class="primary">Add</button></form>`
+      : `<button type="button" class="sheet-adder" data-add="sub">+ Add subtask</button>`}
     <div class="sheet-foot">
       <button type="button" class="sheet-delete">Delete task</button>
       <button type="button" class="primary sheet-close">Done</button>
@@ -967,6 +1037,12 @@ function sheetCommit(focusSel) {
 sheetBody.addEventListener('click', async e => {
   const t = sheetTask();
   if (e.target.closest('.sheet-close')) return sheet.close();
+  const adder = e.target.closest('.sheet-adder');
+  if (adder) { // "+ Add link" / "+ Add subtask": show the field, ready to type
+    sheetAdding = adder.dataset.add;
+    drawSheet();
+    return sheetBody.querySelector(sheetAdding === 'sub' ? '.sheet-add-sub input' : `.sheet-add-link[data-owner="${sheetAdding.slice(5)}"] input`)?.focus();
+  }
   const linkDel = e.target.closest('.sheet-link-del');
   if (linkDel) { sheetOwner(linkDel.dataset.owner).links.splice(+linkDel.dataset.index, 1); return sheetCommit(); }
   const li = e.target.closest('.sheet-subs li');
@@ -1002,7 +1078,7 @@ sheetBody.addEventListener('submit', e => {
   const f = e.target, input = f.querySelector('input'), t = sheetTask();
   if (f.matches('.sheet-add-sub')) {
     const name = input.value.trim();
-    if (!name) return;
+    if (!name) { sheetAdding = null; return drawSheet(); } // Enter on an empty field: done adding
     (t.subtasks ||= []).push({ id: uid(), name, done: false });
     return sheetCommit('.sheet-add-sub input'); // ready for the next one
   }
@@ -1010,6 +1086,7 @@ sheetBody.addEventListener('submit', e => {
     const url = normalizeUrl(input.value);
     if (!url) { f.nextElementSibling.textContent = 'That doesn\'t look like a web link.'; return; }
     (sheetOwner(f.dataset.owner).links ||= []).push({ url });
+    sheetAdding = null;
     sheetCommit();
   }
 });
@@ -1823,7 +1900,7 @@ function render() {
 
   // Remember which day is at the left edge of the view, so re-rendering
   // (after a change, a zoom or while dragging) doesn't jump the scroll position
-  const leftDay = timelineEl() && chartStart ? dayNumber(chartStart) + getTimeScroll() / renderedDayW : null;
+  const leftDay = timelineEl() && chartStart ? getScrollDay() : null;
   const scrollTop = chartEl.scrollTop;
 
   // Range: the tasks' dates and today (or the next four weeks when there are no
@@ -2033,7 +2110,7 @@ function render() {
 
   renderTurned(min, totalDays, dayW, todayDate);
   if (!exportOpts) {
-    if (leftDay !== null) setTimeScroll((leftDay - dayNumber(min)) * dayW);
+    if (leftDay !== null) scrollToDay(leftDay);
     chartEl.scrollTop = scrollTop;
   }
   applyDragVisual(); // re-apply an in-progress drag to the fresh elements
