@@ -335,7 +335,7 @@ const MIN_DAY_W = 2;
 // measure and scroll along the time axis, whichever way it runs.
 const turnedEl = document.getElementById('turned');
 const turnedOn = () => document.documentElement.classList.contains('phone-chart');
-const TURNED_HEAD = 110, TURNED_DATES = 58;      // header height and date column width (match styles.css)
+const TURNED_HEAD = 0, TURNED_DATES = 58;        // no header; date column width (matches styles.css)
 const timeLength = () => turnedOn() ? turnedEl.clientHeight - TURNED_HEAD : chartEl.clientWidth - labelsW();
 const getTimeScroll = () => turnedOn() ? turnedEl.scrollTop : chartEl.scrollLeft;
 const setTimeScroll = px => { if (turnedOn()) turnedEl.scrollTop = px; else chartEl.scrollLeft = px; };
@@ -679,7 +679,7 @@ function renderSchedule() {
         <span class="${s.done ? 'sub-checked' : ''}">${esc(s.name)}</span>
         ${(s.links || []).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">📎 ${esc(linkLabel(l.url))}</a>`).join('')}</label>`).join('')}
       ${links.map(l => `<a class="sched-link" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">📎 ${esc(linkLabel(l.url))}</a>`).join('')}
-      <button class="sched-edit" data-task="${t.id}">Edit dates, group and more</button>
+      <button class="sched-edit" data-task="${t.id}">Open task</button>
     </div>`;
     return `<article class="sched-card${pct === 100 ? ' done' : ''}${open ? ' open' : ''}" data-id="${t.id}" style="--bar:${c.bg}">
       <div class="sched-main">${status}
@@ -709,7 +709,7 @@ scheduleEl.addEventListener('click', e => {
   const cardEl = e.target.closest('.sched-card');
   if (!cardEl) return;
   const t = tasks.find(t => t.id === cardEl.dataset.id);
-  if (edit) return startEdit(t.id);
+  if (edit) return openTaskSheet(t.id);
   if (status && !status.classList.contains('ring')) { t.done = !t.done; save(); render(); return; }
   scheduleOpen.has(t.id) ? scheduleOpen.delete(t.id) : scheduleOpen.add(t.id); // tap a card (or its ring): details
   renderSchedule();
@@ -723,12 +723,14 @@ scheduleEl.addEventListener('change', e => {
 
 // ---- Phones: the Chart turned a quarter (time runs down) ----
 // On a phone, Chart shows the Gantt chart turned: dates run down the left side
-// and each task is a vertical bar in its own column, so swiping up/down moves
-// through time. The header (group names, task names written upwards) stays at
-// the top and the dates stay at the left while scrolling. It uses the same
-// zoom (the height of one day) and the same Day/Week/Month/Quarter, ‹ ›, Today
-// and Overview buttons; a pinch zooms. Tap a bar or a name to edit the task,
-// tap a group name to collapse or expand the group.
+// (staying in place while scrolling sideways) and each task is a vertical bar
+// in its own column, with its name written inside, so swiping up/down moves
+// through time. It uses the same zoom (the height of one day) and the same
+// Day/Week/Month/Quarter, ‹ ›, Today and Overview buttons; a pinch zooms.
+// Tap a bar to open the task sheet; press and hold an empty spot, then drag,
+// to create a task.
+let turnedCols = [], turnedColW = 40; // the groups of the columns, and their width (for creating tasks)
+
 function renderTurned(min, totalDays, H, todayDate) {
   if (!turnedOn() || exportOpts) return;
   syncGroupColors();
@@ -746,31 +748,26 @@ function renderTurned(min, totalDays, H, todayDate) {
     else groups.get(g).forEach(t => cols.push({ g, t }));
   }
   const colW = Math.max(36, Math.min(72, Math.floor((turnedEl.clientWidth - TURNED_DATES) / Math.max(1, cols.length))));
+  turnedCols = cols.map(c => c.g);
+  turnedColW = colW;
   const y = s => daysBetween(min, parse(s)) * H;
 
-  let groupRow = '', nameRow = '', bars = '';
-  for (let i = 0; i < cols.length;) {
-    const g = cols[i].g;
-    let n = 0;
-    while (i + n < cols.length && cols[i + n].g === g) n++;
-    const c = colour(g);
-    groupRow += `<div class="t-group"${g ? ` data-toggle="${esc(g)}"` : ''} style="width:${n * colW}px;--bar:${c.bg};--bar-text:${c.fg}"
-      title="${esc(groupLabel(g))}${g ? ' (tap to collapse or expand)' : ''}">${collapsed.has(g) ? '▸ ' : ''}${esc(groupLabel(g))}</div>`;
-    i += n;
-  }
+  let bars = '';
   cols.forEach((col, i) => {
     const x = TURNED_DATES + i * colW, c = colour(col.g);
     if (col.t) {
       const t = col.t, pct = progressOf(t), done = pct === 100 ? ' done' : '';
       const len = daysBetween(parse(t.start), parse(t.end)) + 1;
-      nameRow += `<div class="t-name${done}" data-id="${t.id}" style="width:${colW}px;--bar:${c.bg}"><span>${esc(t.name)}</span></div>`;
+      const extras = [(t.subtasks || []).length ? `${pct}%` : '', (t.links || []).length ? '📎' : ''].filter(Boolean).join(' ');
       bars += `<div class="t-bar${done}" data-id="${t.id}" style="left:${x + 4}px;width:${colW - 8}px;top:${y(t.start)}px;height:${len * H}px;--bar:${c.bg}"
-        title="${esc(t.name)}: ${t.start} → ${t.end} (${len} day${len > 1 ? 's' : ''})${(t.subtasks || []).length ? ` · ${pct}%` : ''}">
-        <span class="t-progress" style="height:${pct}%"></span>${t.milestone ? `<i class="t-ms ${t.milestone}"></i>` : ''}</div>`;
+        title="${esc(t.name)}: ${t.start} → ${t.end}">
+        <span class="t-progress" style="height:${pct}%"></span>
+        <span class="t-label">${esc(t.name)}${extras ? `<small> ${extras}</small>` : ''}</span>
+        ${t.milestone ? `<i class="t-ms ${t.milestone}"></i>` : ''}</div>`;
     } else { // a collapsed group: its whole span
       const s = col.list[0].start, e = col.list.reduce((m, t) => t.end > m ? t.end : m, col.list[0].end);
-      nameRow += `<div class="t-name" style="width:${colW}px;--bar:${c.bg}"><span>${col.list.length} tasks</span></div>`;
-      bars += `<div class="t-bar t-groupbar" style="left:${x + 4}px;width:${colW - 8}px;top:${y(s)}px;height:${(daysBetween(parse(s), parse(e)) + 1) * H}px;--bar:${c.bg}"></div>`;
+      bars += `<div class="t-bar t-groupbar" style="left:${x + 4}px;width:${colW - 8}px;top:${y(s)}px;height:${(daysBetween(parse(s), parse(e)) + 1) * H}px;--bar:${c.bg}">
+        <span class="t-label">${esc(groupLabel(col.g))} (${col.list.length})</span></div>`;
     }
   });
 
@@ -792,20 +789,86 @@ function renderTurned(min, totalDays, H, todayDate) {
 
   const width = TURNED_DATES + cols.length * colW;
   turnedEl.innerHTML = `<div class="t-canvas" style="width:${width}px">
-    <div class="t-head" style="width:${width}px">
-      <div class="t-corner"></div>
-      <div class="t-cols">${hasGroups ? `<div class="t-groups">${groupRow}</div>` : ''}<div class="t-names">${nameRow}</div></div>
-    </div>
     <div class="t-body${H >= 10 ? ' day-lines' : ''}" style="height:${totalDays * H}px;--day:${H}px">
       <div class="t-dates">${dates}</div>${lines}${today}${bars}
     </div></div>`;
 }
 
+// Tap a bar: the task sheet
 turnedEl.addEventListener('click', e => {
-  const group = e.target.closest('.t-group[data-toggle]');
-  if (group) return toggleGroup(group.dataset.toggle);
-  const item = e.target.closest('.t-bar[data-id], .t-name[data-id]');
-  if (item) startEdit(item.dataset.id);
+  if (turnedPress?.done) { turnedPress = null; return; } // the end of a press-and-drag isn't a tap
+  const bar = e.target.closest('.t-bar[data-id]');
+  if (bar) openTaskSheet(bar.dataset.id);
+});
+turnedEl.addEventListener('contextmenu', e => e.preventDefault()); // a long press shouldn't open the phone's menu
+
+// Press and hold an empty spot, then drag up/down: create a task over those days.
+// Moving before the hold is complete is an ordinary scroll.
+const HOLD_MS = 450;
+let turnedPress = null; // { x, y, timer, active, done, day0, col, created }
+const turnedBody = () => turnedEl.querySelector('.t-body');
+const dayAtY = clientY => Math.floor(dayNumber(chartStart) + (clientY - turnedBody().getBoundingClientRect().top) / renderedDayW);
+
+function drawTurnedGhost() {
+  const p = turnedPress, a = Math.min(p.day0, p.day1), b = Math.max(p.day0, p.day1);
+  p.created = { start: dayString(a), end: dayString(b) };
+  let ghost = turnedEl.querySelector('.t-ghost');
+  if (!ghost) { ghost = document.createElement('div'); ghost.className = 't-ghost'; turnedBody().appendChild(ghost); }
+  ghost.style.left = TURNED_DATES + Math.max(0, p.col) * turnedColW + 2 + 'px';
+  ghost.style.width = turnedColW - 4 + 'px';
+  ghost.style.top = (a - dayNumber(chartStart)) * renderedDayW + 'px';
+  ghost.style.height = (b - a + 1) * renderedDayW + 'px';
+  ghost.innerHTML = `<span>${shortDate(p.created.start)}${a === b ? '' : ` → ${shortDate(p.created.end)}`}</span>`;
+}
+
+turnedEl.addEventListener('touchstart', e => {
+  if (turnedPress) { clearTimeout(turnedPress.timer); turnedPress.active && turnedEl.querySelector('.t-ghost')?.remove(); turnedPress = null; }
+  if (e.touches.length !== 1 || e.target.closest('.t-bar')) return;
+  const t = e.touches[0];
+  const p = turnedPress = { x: t.clientX, y: t.clientY, active: false, done: false };
+  p.timer = setTimeout(() => {
+    if (turnedPress !== p) return;
+    p.active = true;
+    navigator.vibrate?.(20);
+    const canvas = turnedEl.querySelector('.t-canvas').getBoundingClientRect();
+    p.col = Math.floor((p.x - canvas.left - TURNED_DATES) / turnedColW);
+    p.day0 = p.day1 = dayAtY(p.y);
+    drawTurnedGhost();
+  }, HOLD_MS);
+}, { passive: true });
+
+turnedEl.addEventListener('touchmove', e => {
+  const p = turnedPress;
+  if (!p) return;
+  const t = e.touches[0];
+  if (!p.active) { // moved before the hold: it's a scroll
+    if (e.touches.length > 1 || Math.hypot(t.clientX - p.x, t.clientY - p.y) > 8) { clearTimeout(p.timer); turnedPress = null; }
+    return;
+  }
+  e.preventDefault(); // creating: the finger draws, the chart doesn't scroll
+  const r = turnedEl.getBoundingClientRect(), EDGE = 40;
+  if (t.clientY > r.bottom - EDGE) turnedEl.scrollTop += 12;        // near the edges, scroll along
+  else if (t.clientY < r.top + EDGE) turnedEl.scrollTop -= 12;
+  p.day1 = dayAtY(t.clientY);
+  drawTurnedGhost();
+}, { passive: false });
+
+turnedEl.addEventListener('touchend', () => {
+  const p = turnedPress;
+  if (!p) return;
+  clearTimeout(p.timer);
+  if (!p.active) { turnedPress = null; return; }
+  p.done = true; // so the click that may follow isn't taken as a tap
+  setTimeout(() => { if (turnedPress === p) turnedPress = null; }, 400);
+  turnedEl.querySelector('.t-ghost')?.remove();
+  const g = p.col >= 0 && p.col < turnedCols.length ? turnedCols[p.col] : null;
+  createTaskFromDrag({ created: p.created, rowGroup: g || null });
+});
+turnedEl.addEventListener('touchcancel', () => {
+  if (!turnedPress) return;
+  clearTimeout(turnedPress.timer);
+  turnedEl.querySelector('.t-ghost')?.remove();
+  turnedPress = null;
 });
 
 // Pinch to zoom, keeping the day between the fingers in place
@@ -825,6 +888,132 @@ turnedEl.addEventListener('touchmove', e => {
   turnedEl.scrollTop = (day - dayNumber(chartStart)) * renderedDayW - offset;
 }, { passive: false });
 turnedEl.addEventListener('touchend', e => { if (e.touches.length < 2) turnedPinch = null; });
+
+// ---- Task sheet (phones) ----
+// Everything about one task in a sheet that slides up: name, done or progress,
+// dates, group, milestone, links, and its subtasks (each with a tick box, an
+// editable name, its own links and ✕), plus adding subtasks and deleting the
+// task. Changes are saved straight away.
+const sheet = document.getElementById('taskSheet');
+const sheetBody = document.getElementById('sheetBody');
+let sheetTaskId = null;
+let sheetLinksFor = null; // the subtask whose links are shown under it
+
+function openTaskSheet(id) {
+  sheetTaskId = id;
+  sheetLinksFor = null;
+  drawSheet();
+  if (!sheet.open) sheet.showModal();
+}
+
+function sheetLinks(links, owner) {
+  return `<ul class="sheet-links">${(links || []).map((l, i) => `<li>${CLIP_ICON}
+      <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(l.url))}</a>
+      <button type="button" class="sheet-link-del" data-owner="${owner}" data-index="${i}" title="Remove link">✕</button></li>`).join('')}</ul>
+    <form class="sheet-add-link" data-owner="${owner}">
+      <input type="text" inputmode="url" autocomplete="off" placeholder="Paste a link (Google Doc, website…)">
+      <button class="primary">Add</button>
+    </form><div class="error"></div>`;
+}
+
+function drawSheet() {
+  const t = tasks.find(x => x.id === sheetTaskId);
+  if (!t) { if (sheet.open) sheet.close(); return; }
+  syncGroupColors();
+  const c = t.group ? PALETTE[groupColors[t.group]] || UNGROUPED_COLOR : UNGROUPED_COLOR;
+  const subs = t.subtasks || [], pct = progressOf(t);
+  const ms = v => `<option value="${v}"${(t.milestone || '') === v ? ' selected' : ''}>${{ '': 'None', start: 'At start', end: 'At end' }[v]}</option>`;
+  sheetBody.innerHTML = `
+    <div class="sheet-head" style="--bar:${c.bg}">
+      <input class="sheet-name" value="${esc(t.name)}" aria-label="Task name" autocomplete="off">
+      <button type="button" class="sheet-close" title="Close">✕</button>
+    </div>
+    <div class="sheet-status">${subs.length
+      ? `${subs.filter(s => s.done).length}/${subs.length} subtasks · ${pct}%`
+      : `<label class="sheet-check"><input type="checkbox" class="sheet-done" ${t.done ? 'checked' : ''}> Done</label>`}</div>
+    <div class="sheet-grid">
+      <label>Start <input type="date" class="sheet-start" value="${t.start}"></label>
+      <label>End <input type="date" class="sheet-end" value="${t.end}"></label>
+      <label>Group <input class="sheet-group" list="groupList" value="${esc(t.group || '')}" placeholder="none" autocomplete="off"></label>
+      <label>Milestone <select class="sheet-ms">${ms('')}${ms('start')}${ms('end')}</select></label>
+    </div>
+    <div class="error sheet-date-error"></div>
+    <h3>Links</h3>
+    ${sheetLinks(t.links, 'task')}
+    <h3>Subtasks</h3>
+    <ul class="sheet-subs">${subs.map(s => `<li data-sub="${s.id}">
+        <div class="sheet-sub-row">
+          <input type="checkbox" class="sheet-sub-done" ${s.done ? 'checked' : ''} aria-label="Done">
+          <input class="sheet-sub-name${s.done ? ' sub-checked' : ''}" value="${esc(s.name)}" aria-label="Subtask name" autocomplete="off">
+          <button type="button" class="sheet-sub-links${(s.links || []).length ? ' has-links' : ''}${sheetLinksFor === s.id ? ' open' : ''}" title="Links">${CLIP_ICON}${(s.links || []).length ? `<small>${s.links.length}</small>` : ''}</button>
+          <button type="button" class="sheet-sub-del" title="Delete subtask">✕</button>
+        </div>
+        ${sheetLinksFor === s.id ? `<div class="sheet-sub-linkbox">${sheetLinks(s.links, s.id)}</div>` : ''}
+      </li>`).join('')}</ul>
+    <form class="sheet-add-sub"><input autocomplete="off" placeholder="Add a subtask…"><button class="primary">Add</button></form>
+    <div class="sheet-foot">
+      <button type="button" class="sheet-delete">Delete task</button>
+      <button type="button" class="primary sheet-close">Done</button>
+    </div>`;
+}
+
+const sheetTask = () => tasks.find(x => x.id === sheetTaskId);
+const sheetOwner = owner => owner === 'task' ? sheetTask() : sheetTask().subtasks.find(s => s.id === owner);
+function sheetCommit(focusSel) {
+  save(); render(); drawSheet();
+  if (focusSel) sheetBody.querySelector(focusSel)?.focus();
+}
+
+sheetBody.addEventListener('click', async e => {
+  const t = sheetTask();
+  if (e.target.closest('.sheet-close')) return sheet.close();
+  const linkDel = e.target.closest('.sheet-link-del');
+  if (linkDel) { sheetOwner(linkDel.dataset.owner).links.splice(+linkDel.dataset.index, 1); return sheetCommit(); }
+  const li = e.target.closest('.sheet-subs li');
+  if (e.target.closest('.sheet-sub-links')) { sheetLinksFor = sheetLinksFor === li.dataset.sub ? null : li.dataset.sub; return drawSheet(); }
+  if (e.target.closest('.sheet-sub-del')) { t.subtasks = t.subtasks.filter(s => s.id !== li.dataset.sub); return sheetCommit(); }
+  if (e.target.closest('.sheet-delete')) {
+    if (await askConfirm('Delete task?', `<b>${esc(t.name)}</b> and its subtasks and links will be removed.`, 'Delete')) {
+      sheet.close(); removeTask(t.id);
+    }
+  }
+});
+
+sheetBody.addEventListener('change', e => {
+  const t = sheetTask(), el = e.target, li = el.closest('.sheet-subs li');
+  if (el.matches('.sheet-name')) { t.name = el.value.trim() || t.name; return sheetCommit(); }
+  if (el.matches('.sheet-done')) { t.done = el.checked; return sheetCommit(); }
+  if (el.matches('.sheet-group')) { t.group = el.value.trim(); return sheetCommit(); }
+  if (el.matches('.sheet-ms')) { t.milestone = el.value; return sheetCommit(); }
+  if (el.matches('.sheet-sub-done')) { t.subtasks.find(s => s.id === li.dataset.sub).done = el.checked; return sheetCommit(); }
+  if (el.matches('.sheet-sub-name')) { const s = t.subtasks.find(s => s.id === li.dataset.sub); s.name = el.value.trim() || s.name; return sheetCommit(); }
+  if (el.matches('.sheet-start, .sheet-end')) {
+    const start = sheetBody.querySelector('.sheet-start').value, end = sheetBody.querySelector('.sheet-end').value;
+    if (!start || !end || end < start) { sheetBody.querySelector('.sheet-date-error').textContent = 'The end date must be on or after the start date.'; return; }
+    const before = { ...t };
+    Object.assign(t, { start, end });
+    sheetCommit();
+    offerToShiftFollowing(before, t).then(drawSheet);
+  }
+});
+
+sheetBody.addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target, input = f.querySelector('input'), t = sheetTask();
+  if (f.matches('.sheet-add-sub')) {
+    const name = input.value.trim();
+    if (!name) return;
+    (t.subtasks ||= []).push({ id: uid(), name, done: false });
+    return sheetCommit('.sheet-add-sub input'); // ready for the next one
+  }
+  if (f.matches('.sheet-add-link')) {
+    const url = normalizeUrl(input.value);
+    if (!url) { f.nextElementSibling.textContent = 'That doesn\'t look like a web link.'; return; }
+    (sheetOwner(f.dataset.owner).links ||= []).push({ url });
+    sheetCommit();
+  }
+});
+sheet.addEventListener('click', e => { if (e.target === sheet) sheet.close(); }); // tap outside the sheet closes it
 
 // ---- "Coming up" notice ----
 // When the app opens (and again after midnight if it stays open), a notice
