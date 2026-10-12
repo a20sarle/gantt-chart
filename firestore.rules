@@ -1,0 +1,76 @@
+// Firestore security rules for WorkNest: paste these into
+// Firebase console → Firestore Database → Rules, then Publish.
+//
+// - Anyone signed in can create projects (and so own them). To allow only
+//   Google sign-ins, uncomment the sign_in_provider line below (and set
+//   GOOGLE_ONLY in collab.js).
+// - A project can be opened by its owner and by the email addresses the owner
+//   added (viewers). Only the owner can change the plan or who can see it.
+// - Everyone on a project can read its comments and images, and write
+//   comments (as themselves). A comment can be deleted by whoever wrote it, or
+//   by the project's owner.
+// - Everyone has their own settings (their labels), which only they can read
+//   and change.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function me() {
+      return request.auth.token.email.lower();
+    }
+    function projectData(pid) {
+      return get(/databases/$(database)/documents/projects/$(pid)).data;
+    }
+    function isOwner(pid) {
+      return signedIn() && projectData(pid).owner == me();
+    }
+    function isMember(pid) {
+      return signedIn() && (projectData(pid).owner == me() || me() in projectData(pid).viewers);
+    }
+
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid
+        && (request.resource == null || request.resource.data.labels.size() <= 200);
+    }
+
+    match /projects/{pid} {
+      allow read: if signedIn() && (resource.data.owner == me() || me() in resource.data.viewers);
+      allow create: if signedIn()
+        // && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.resource.data.owner == me()
+        && request.resource.data.viewers is list
+        && request.resource.data.data is string;
+      allow update: if signedIn()
+        && resource.data.owner == me()
+        && request.resource.data.owner == me()
+        && request.resource.data.viewers is list
+        && request.resource.data.viewers.size() <= 50;
+      allow delete: if signedIn() && resource.data.owner == me();
+
+      match /comments/{cid} {
+        allow read: if isMember(pid);
+        allow create: if isMember(pid)
+          && request.resource.data.keys().hasOnly(['taskId', 'text', 'uid', 'email', 'name', 'images', 'at'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.email == me()
+          && request.resource.data.at == request.time
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 10000
+          && request.resource.data.images is list
+          && request.resource.data.images.size() <= 10;
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isOwner(pid));
+      }
+
+      match /images/{iid} {
+        allow read: if isMember(pid);
+        allow create: if isMember(pid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.data is string
+          && request.resource.data.data.size() < 1000000;
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isOwner(pid));
+      }
+    }
+  }
+}

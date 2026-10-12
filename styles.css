@@ -1,12 +1,14 @@
   :root {
     --labels-w: 220px; /* width of the task list (narrower on phones) */
     --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
-    --line: #e4e4e0; --accent: #3b6fd8; --today: #d94a3b; --weekend: #f0f0ec;
+    --line: #e4e4e0; --accent: #4b49b8; --today: #d94a3b; --weekend: #f0f0ec;
+    --on-accent: #fff; /* text on the accent colour */
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa0;
-      --line: #2e2e33; --accent: #6b95ea; --today: #ef6a5b; --weekend: #252529;
+      --line: #2e2e33; --accent: #aaa7ff; --today: #ef6a5b; --weekend: #252529;
+      --on-accent: #16182e;
     }
   }
   * { box-sizing: border-box; }
@@ -21,6 +23,13 @@
      the dates stay pinned at the top and the list stays pinned on the left */
   #chart { flex: 1; min-height: 0; overflow: auto; touch-action: pan-x pan-y; } /* a pinch zooms the chart, not the page */
   h1 { font-size: 20px; margin: 0 0 16px; }
+  /* The project's name, with WorkNest's logo before it (back to all projects) */
+  .app-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .app-head h1 { margin: 0; }
+  .home-link { display: none; flex: none; padding: 4px; border-radius: 6px; }
+  .home-link:hover { background: var(--weekend); }
+  .home-logo { display: block; width: 26px; height: auto; }
+  html.cloud .home-link { display: block; }
 
   form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
@@ -28,7 +37,7 @@
           background: var(--bg); color: var(--text); }
   button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line);
            background: var(--panel); color: var(--text); cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
   .error { color: var(--today); font-size: 12px; min-height: 16px; margin-top: 6px; }
 
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
@@ -120,11 +129,11 @@
   .today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--today); z-index: 2; }
 
   /* Dialogs ("Move following tasks?", "New task") */
-  dialog { border: 1px solid var(--line); border-radius: 10px; padding: 20px; max-width: 460px; width: calc(100% - 32px);
+  dialog { border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; box-shadow: 0 24px 60px rgba(27,31,59,.25); max-width: 460px; width: calc(100% - 32px);
                  background: var(--panel); color: var(--text); box-shadow: 0 10px 40px rgba(0,0,0,.25); }
-  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog::backdrop { background: rgba(27,31,59,.45); }
   dialog form { display: block; }
-  dialog h2 { font-size: 16px; margin: 0 0 8px; }
+  dialog h2 { font-size: 17px; margin: 0 0 10px; }
   dialog p { margin: 0 0 10px; }
   dialog .list { max-height: min(60vh, 480px); overflow-y: auto; margin-bottom: 16px; }
   dialog .list h3 { font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
@@ -235,7 +244,7 @@
   .seg button { border-radius: 0; margin-left: -1px; }
   .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
   .seg button:last-child { border-radius: 0 6px 6px 0; }
-  .seg button.active { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; }
+  .seg button.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); position: relative; }
 
   /* Grid lines: stronger at week and month starts */
   .day.week-start { border-left-color: color-mix(in srgb, var(--muted) 35%, var(--line)); }
@@ -296,6 +305,9 @@
           background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
           box-shadow: 0 6px 20px rgba(0,0,0,.15); display: flex; flex-direction: column; }
   .menu[hidden] { display: none; }
+  #shareItem { display: flex; flex-direction: column; }
+  #shareItem[hidden] { display: none; }
+  #shareItem hr { border: none; border-top: 1px solid var(--line); margin: 4px 6px; }
   .seg .menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px; }
   .seg .menu button:hover, .seg .menu button:focus-visible { background: var(--weekend); outline: none; }
 
@@ -303,13 +315,17 @@
   .view-nav { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
   .view-nav .nav-arrow { border-color: transparent; background: none; font-size: 18px; line-height: 1; padding: 4px 9px; border-radius: 50%; }
   .view-nav .nav-arrow:hover { background: var(--weekend); }
-  #viewMenuBtn { min-width: 104px; } /* the same width for every view, so the arrows stay put */
+  #viewMenuBtn, .combo-view-btn { min-width: 104px; } /* the same width for every view, so the arrows stay put */
+  .combo-view-menu { left: 0; right: auto; }
+  .combo-navgroup { display: flex; align-items: center; gap: 8px; flex: none; }
   .view-menu { min-width: 150px; }
-  .view-menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px 8px 30px; position: relative; }
+  .view-menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px 8px 30px; position: relative; white-space: nowrap; }
   .view-menu button:hover, .view-menu button:focus-visible { background: var(--weekend); outline: none; }
   .view-menu button.active { font-weight: 600; }
   .view-menu button.active::before { content: "✓"; position: absolute; left: 11px; color: var(--accent); }
   .view-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 6px; }
+  #collapseAllItem { display: flex; flex-direction: column; }
+  #collapseAllItem[hidden] { display: none; }
 
   /* "Coming up" notice, bottom right */
   .notice { position: fixed; right: 16px; bottom: 16px; z-index: 30; width: min(340px, calc(100vw - 32px));
@@ -343,10 +359,11 @@
 
   /* Row buttons that only show when needed (📎 without links, +, ✕): while
      hovering the row with a mouse, or once the row is tapped on a touch screen.
-     Hidden buttons can't be clicked or tapped by accident. */
-  .labels .row .reveal { visibility: hidden; }
-  @media (hover: hover) { .labels .row:hover .reveal { visibility: visible; } }
-  .labels .row.selected .reveal, .labels .row .reveal:focus-visible, .labels .row .link-btn.has-links { visibility: visible; }
+     Hidden buttons take no room (names get the whole width) and can't be
+     clicked or tapped by accident. */
+  .labels .row .reveal { display: none; }
+  @media (hover: hover) { .labels .row:hover .reveal { display: inline-flex; } }
+  .labels .row.selected .reveal, .labels .row:focus-within .reveal, .labels .row .link-btn.has-links { display: inline-flex; }
   .labels .row.selected { box-shadow: inset 3px 0 0 var(--bar); }
 
 
@@ -357,7 +374,7 @@
     h1 { font-size: 18px; margin-bottom: 10px; }
     /* View controls after Today */
     #viewBtns { gap: 2px; }
-    #viewMenuBtn { padding: 6px 10px; font-size: 13px; }
+    #viewMenuBtn, .combo-view-btn { padding: 6px 10px; font-size: 13px; }
     .view-nav .nav-arrow { padding: 4px 8px; }
     .toolbar { gap: 6px; }
     .toolbar .spacer { display: none; }
@@ -480,3 +497,650 @@
   /* The task sheet on a computer: a centred panel */
   @media (min-width: 641px) { dialog.sheet { width: min(520px, calc(100vw - 32px)); border-radius: 12px; } }
   main > h1 { flex: none; }
+
+  /* ---- Sharing online (collab.js) ---- */
+  .menu-wrap[hidden] { display: none; }
+  .avatar { width: 32px; height: 32px; padding: 0; border-radius: 50%; border: none; font-weight: 700;
+            background: var(--accent); color: var(--on-accent); }
+  .acct-menu { left: auto; right: 0; min-width: 240px; max-height: 70vh; overflow-y: auto; }
+  .acct-menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px; }
+  .acct-menu button:hover, .acct-menu button:focus-visible { background: var(--weekend); outline: none; }
+  .acct-menu button.active { font-weight: 600; color: var(--accent); }
+  .acct-menu small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .acct-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 6px; }
+  .acct-head { padding: 8px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .acct-head b { display: block; color: var(--text); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  .acct-label { padding: 6px 12px 2px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .acct-loading { padding: 6px 12px; font-size: 12px; color: var(--muted); }
+
+  .cloud-dialog { max-width: 440px; }
+  .cloud-dialog .muted { color: var(--muted); font-size: 13px; }
+  .cloud-row { display: flex !important; gap: 8px; margin: 0 0 4px; }
+  .cloud-row input { flex: 1; min-width: 0; }
+  .cloud-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 8px 0 12px; }
+  .cloud-or::before, .cloud-or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+  .cloud-google { width: 100%; }
+  .cloud-label { font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  .cloud-people { list-style: none; margin: 0 0 8px; padding: 0; }
+  .cloud-people li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .cloud-people span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .cloud-people small { color: var(--muted); font-size: 12px; }
+  .cloud-people button { border: none; background: none; color: var(--muted); padding: 2px 6px; }
+  .cloud-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
+  .cloud-delete { color: var(--today); border-color: color-mix(in srgb, var(--today) 40%, var(--line)); }
+
+  /* Viewing someone else's project: everything that would change the plan is hidden */
+  html.read-only #newTaskBtn, html.read-only #importBtn,
+  html.read-only .labels .row .reveal:not(.link-btn), html.read-only .link-btn:not(.has-links),
+  html.read-only .link-dot, html.read-only .bar .handle, html.read-only .add-row span,
+  html.read-only #linkForm, html.read-only .link-remove, html.read-only .turned-hint { display: none !important; }
+  html.read-only #exportMenuBtn { border-radius: 6px; }
+  /* Done / not done, only shown: no hand, no hover (the round mark for a task, the square for a subtask) */
+  .labels .row span.status { cursor: default; }
+  .sub-tick { flex: none; display: inline-block; width: 14px; height: 14px; border: 2px solid var(--bar, var(--accent)); border-radius: 3px;
+              background: #fff; color: #fff; font-size: 9px; font-weight: 800; line-height: 10px; text-align: center; cursor: default; }
+  .sub-tick.on { background: var(--bar, var(--accent)); }
+  .sub-tick.round { border-radius: 50%; } /* (a task: round, as in the list) */
+  .labels .row .sub-tick { flex: none; overflow: visible; } /* (not stretched like the name) */
+  .labels .row:not(.grouped) .sub-tick { border-color: var(--bar-text); }
+  .labels .row:not(.grouped) .sub-tick.on { background: var(--bar-text); color: var(--bar); }
+  /* The task sheet when viewing: plain text, and a note saying why */
+  .sheet-title { flex: 1; min-width: 0; margin: 0; padding: 4px 6px; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+  .sheet-ro-note { display: flex; align-items: center; gap: 8px; margin: 2px 0 12px; padding: 8px 12px; border-radius: 8px;
+                   background: var(--bg); color: var(--muted); font-size: 13px; }
+  .sheet-ro-note svg { flex: none; }
+  .sheet-state { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+  .sheet-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+  .sheet-field b { font-size: 15px; font-weight: 400; color: var(--text); padding: 3px 0; }
+  .sheet-field b.none { color: var(--muted); }
+  .sheet-sub-text { flex: 1; min-width: 0; padding: 5px 6px; }
+  .sheet-sub-text.sub-checked { text-decoration: line-through; opacity: .6; }
+  html.read-only .bar, html.read-only .labels .task-row { cursor: pointer; }
+  /* (nothing can be drawn or dragged in the chart: the plain arrow, not the drawing cross or a hand) */
+  html.read-only .timeline .row, html.read-only .group-bar { cursor: default; }
+  html.read-only #projectName { cursor: default; }
+  .sheet-none { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
+
+  /* A task's comment count, in the list; highlighted when there are new ones */
+  .cm-badge { display: inline-flex; align-items: center; gap: 2px; flex: none; padding: 0 4px !important;
+              border: none; background: none; color: var(--muted) !important; }
+  .cm-badge small { font-size: 11px; font-weight: 700; }
+  .cm-badge.fresh { color: var(--accent) !important; }
+  .cm-badge.fresh::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 1px; }
+
+  /* The comment thread in the task sheet: a chat, your own messages on the right */
+  .thread .cm-list, .thread .cm-form, .thread h3 { display: none; }
+  .thread.online .cm-list, .thread.online h3 { display: block; }
+  .thread.online .cm-form { display: block; }
+  .cm-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .cm { display: flex; flex-direction: column; align-items: flex-start; max-width: 88%; }
+  .cm.mine { align-self: flex-end; align-items: flex-end; }
+  .cm-meta { font-size: 11px; color: var(--muted); margin: 0 4px 2px; display: flex; align-items: center; gap: 4px; }
+  .cm-meta span { font-weight: 600; color: var(--text); }
+  .cm-del { border: none; background: none; color: var(--muted); padding: 0 4px; font-size: 11px; visibility: hidden; }
+  .cm:hover .cm-del, .cm-del:focus-visible { visibility: visible; }
+  @media (hover: none) { .cm-del { visibility: visible; } }
+  .cm-bubble { background: var(--weekend); border-radius: 12px 12px 12px 4px; padding: 8px 12px; font-size: 14px;
+               overflow-wrap: anywhere; }
+  .cm.mine .cm-bubble { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-radius: 12px 12px 4px 12px; }
+  .cm-bubble p { margin: 0; }
+  .cm-bubble a { color: var(--accent); }
+  .cm-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .cm-bubble p + .cm-imgs { margin-top: 8px; }
+  .cm-bubble > .cm-imgs:first-child { margin-top: 0; }
+  .cm-img { padding: 0; border: none; border-radius: 8px; overflow: hidden; height: 140px; max-width: 100%;
+            background: color-mix(in srgb, var(--muted) 15%, var(--panel)); cursor: zoom-in; }
+  .cm-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .cm-img img:not([src]) { visibility: hidden; }
+  .cm-empty { color: var(--muted); font-size: 13px; }
+  .cm-form { border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); }
+  .cm-form.dropping { border-color: var(--accent); }
+  .cm-form textarea { display: block; width: 100%; resize: none; border: none; background: none; color: var(--text);
+                      font: inherit; padding: 4px; outline: none; min-height: 44px; }
+  .cm-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .cm-add-image { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; color: var(--muted); padding: 6px 4px; }
+  .cm-add-image:hover { color: var(--text); }
+  .cm-status { flex: 1; font-size: 12px; color: var(--muted); }
+  .cm-send { padding: 6px 16px; }
+  .cm-previews { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cm-previews:not(:empty) { margin-bottom: 6px; }
+  .cm-preview { position: relative; }
+  .cm-preview img { display: block; height: 64px; border-radius: 6px; }
+  .cm-preview button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; padding: 0; border: none;
+                       border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; line-height: 20px; }
+
+  /* An image, larger */
+  .image-viewer { padding: 0; border: none; background: none; max-width: 96vw; max-height: 96vh; width: auto; cursor: zoom-out; }
+  .image-viewer::backdrop { background: rgba(0,0,0,.8); }
+  .image-viewer img { display: block; max-width: 96vw; max-height: 96vh; border-radius: 6px; }
+
+  /* ---- Pages (with Firebase set up): start page, your projects, a project ---- */
+  .start, .home { display: none; }
+  html.cloud:not(.page-app) main { display: none; }
+  html.page-start .start, html.page-loading .start { display: flex; }
+  /* (while loading: just the logo and name, as a splash) */
+  html.page-loading .start-tagline, html.page-loading .start-card, html.page-loading .start-foot { visibility: hidden; }
+  html.page-projects .home { display: flex; }
+  html.page-start body, html.page-loading body { background: #1b1f3b; }
+
+  /* The start page: WorkNest's navy, the logo, and a light card to sign in */
+  .start { min-height: 100vh; min-height: 100dvh; flex-direction: column; align-items: center; justify-content: center;
+           padding: 40px 16px 24px; color: #fff; text-align: center; }
+  .start-inner { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; }
+  .start-logo { width: 88px; height: auto; margin-bottom: 22px; }
+  .start h1 { font-size: 36px; margin: 0 0 8px; letter-spacing: -.02em; }
+  .start-tagline { color: #c4c6da; font-size: 16px; line-height: 1.5; margin: 0 0 32px; max-width: 340px; }
+  .start-card { width: 100%; max-width: 380px; padding: 24px; border-radius: 14px; text-align: left;
+                background: #fff; color: #1d1d1f; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+  .start-card h2 { font-size: 17px; margin: 0 0 16px; }
+  .start-card p { margin: 0 0 14px; color: #48484d; }
+  .start-card .error { color: #c8402f; }
+  .start-card button, .start-card input { font: inherit; border-radius: 8px; }
+  .start-card input { background: #fff; color: #1d1d1f; border: 1px solid #d6d6d0; padding: 9px 10px; }
+  .start-card input:focus { outline: 2px solid #1b1f3b; outline-offset: -1px; }
+  .start-google { width: 100%; padding: 10px; background: #fff; color: #1d1d1f; border: 1px solid #d6d6d0; font-weight: 600; }
+  .start-google:hover { background: #f5f5f2; }
+  .start-primary { padding: 9px 14px; background: #1b1f3b; border: 1px solid #1b1f3b; color: #fff; font-weight: 600; white-space: nowrap; }
+  .start-primary:hover { background: #2a2f55; }
+  .start-row { display: flex; gap: 8px; margin: 0; align-items: stretch; }
+  .start-row input { flex: 1; min-width: 0; }
+  .start-card .cloud-or { color: #8a8a90; }
+  .start-card .cloud-or::before, .start-card .cloud-or::after { border-color: #e4e4e0; }
+  .start-again { background: none; border: 1px solid #d6d6d0; color: #1d1d1f; padding: 8px 14px; }
+  .start-foot { color: #8e91aa; font-size: 13px; margin: 24px 0 0; }
+  @media (max-width: 420px) { .start-row { flex-direction: column; } .start h1 { font-size: 30px; } }
+
+  /* ---- Your projects: a navy bar, a sidebar, and the projects as tiles ---- */
+  .home { min-height: 100vh; min-height: 100dvh; flex-direction: column; background: var(--panel); } /* (white, like a project) */
+  .home-bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px;
+              height: 64px; padding: 0 20px; background: #1b1f3b; color: #fff; }
+  .home-bar .spacer { flex: 1; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 700; font-size: 19px;
+           letter-spacing: -.01em; width: 228px; flex: none; }
+  .brand-logo { width: 30px; height: auto; }
+  .home-search { flex: 0 1 560px; display: flex; flex-direction: row; align-items: center; gap: 10px; height: 42px; padding: 0 14px;
+                 border-radius: 21px; background: rgba(255,255,255,.1); color: #c4c6da; font-size: 14px; }
+  .home-search:focus-within { background: #fff; color: #6e6e73; }
+  .home-search input { flex: 1; min-width: 0; border: none; background: none; padding: 0; color: #fff; font-size: 15px; outline: none; }
+  .home-search input::placeholder { color: #c4c6da; }
+  .home-search:focus-within input { color: #1d1d1f; }
+  .home-search:focus-within input::placeholder { color: #8a8a90; }
+  .home-bar .avatar { width: 36px; height: 36px; font-size: 15px; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
+  .home-bar .acct-menu { right: 0; }
+
+  .home-body { flex: 1; display: flex; }
+  .home-new { align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; margin: 0 0 18px 4px;
+              padding: 12px 22px 12px 16px; border: none; border-radius: 14px; background: #1b1f3b; color: #fff;
+              font-weight: 600; font-size: 15px; box-shadow: 0 2px 8px rgba(27,31,59,.25); }
+  .home-new span { font-size: 22px; line-height: 1; font-weight: 400; color: #ffc145; }
+  .home-new:hover { background: #2a2f55; }
+
+  .home-main { flex: 1; min-width: 0; width: 100%; max-width: 1400px; margin: 0 auto; padding: 24px 32px 64px; }
+  .home-title { display: flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 600; margin: 0 0 18px; }
+  .home-title svg { width: 24px; height: 24px; color: var(--muted); }
+  .home-note { margin: 0; padding: 18px 20px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 14px; }
+
+  .tile-menu { position: fixed; z-index: 30; min-width: 170px; }
+  .tile-menu button { border: none; border-radius: 6px; margin: 0; text-align: left; background: none; padding: 8px 12px; }
+  .tile-menu button:hover, .tile-menu button:focus-visible { background: var(--weekend); outline: none; }
+  .tile-menu .danger { color: var(--today); }
+  .tile-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 6px; }
+
+  .home-empty { max-width: 420px; margin: 40px auto; text-align: center; }
+  .home-empty svg { width: 96px; height: auto; margin-bottom: 18px; }
+  .home-empty h2 { font-size: 20px; margin: 0 0 6px; }
+  .home-empty p { color: var(--muted); margin: 0 0 18px; }
+  .home-new-inline { padding: 10px 20px; border: none; border-radius: 12px; background: #1b1f3b; color: #fff; font-weight: 600; }
+
+  /* "Online or on this computer?" */
+  .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; font-size: 13px; }
+  .diff-grid h3 { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 4px 0 6px; }
+  .diff-grid h3 svg { color: var(--accent); }
+  .diff-grid ul { margin: 0; padding-left: 18px; }
+  .diff-grid li { margin-bottom: 5px; }
+  .cloud-dialog:has(.diff-grid) { max-width: 600px; }
+
+  /* Signed in with an emailed link while GOOGLE_ONLY is on: only what's shared with you */
+
+  /* Phones: the sidebar becomes a row of choices, and New project a round button */
+  @media (max-width: 760px) {
+    .home-bar { gap: 10px; padding: 0 12px; height: 58px; }
+    .brand { width: auto; }
+    .brand span { display: none; }
+    .home-search { height: 40px; }
+    .home-body { flex-direction: column; }
+    .home-new { position: fixed; right: 16px; bottom: 20px; z-index: 20; margin: 0; padding: 14px 20px 14px 16px; border-radius: 18px;
+                box-shadow: 0 6px 20px rgba(27,31,59,.35); }
+    .home-main { padding: 14px 12px 96px; }
+    .diff-grid { grid-template-columns: 1fr; }
+  }
+  .start-note { font-size: 13px; color: #6e6e73 !important; margin: 14px 0 0 !important; text-align: center; }
+
+  /* A project on this computer only: its label, and the note where comments would be */
+  .place-badge { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 3px 10px; border-radius: 999px;
+                 font-size: 12px; font-weight: 600; color: var(--muted); border: 1px dashed var(--muted); }
+  .place-badge[hidden] { display: none; }
+  .view-badge { border-style: solid; min-width: 0; }
+  .view-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thread.local h3 { display: block; }
+  .cm-local { display: none; color: var(--muted); font-size: 13px; margin: 0; }
+  .thread.local .cm-local { display: block; }
+  .link-like { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: inherit; }
+  /* Choosing where a new project is saved */
+  .cloud-new > input { width: 100%; margin-bottom: 4px; }
+  .cloud-choice { flex-direction: row; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-top: 8px;
+                  border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 14px; cursor: pointer; }
+  .cloud-choice:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+  .cloud-choice input { margin-top: 3px; }
+  .cloud-choice small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  /* A project (with Firebase set up): the same navy bar as your projects, with the
+     logo (back to your projects), the project's name and your account; the chart
+     gets the whole width below it */
+  html.cloud main { max-width: none; padding: 0; }
+  html.cloud .app-head { flex: none; height: 58px; margin: 0; padding: 0 16px; gap: 12px; background: #1b1f3b; color: #fff; }
+  .app-head .spacer { flex: 1; }
+  html.cloud .home-link:hover { background: rgba(255,255,255,.12); }
+  html.cloud .home-logo { width: 28px; }
+  .home-brand { display: none; }
+  html.cloud .home-link { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; padding: 4px 8px 4px 4px; }
+  html.cloud .home-brand { display: inline; font-weight: 700; font-size: 19px; letter-spacing: -.01em; }
+  html.cloud .app-head .avatar { width: 34px; height: 34px; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
+  html.cloud .app-head .acct-menu { right: 0; }
+  html.cloud .chart-panel { padding: 14px 20px 0; min-height: 0; }
+  @media (max-width: 640px) {
+    html.cloud .app-head { height: 52px; padding: 0 10px; gap: 8px; }
+    .project-title .place-badge { padding: 2px 6px; }
+    .project-title .place-badge:not(.view-badge) { font-size: 0; gap: 0; } /* (just the icon on a phone) */
+    .view-badge .view-who { display: none; } /* (on a phone: just "View only") */
+    html.cloud .chart-panel { padding: 10px 8px 0; }
+  }
+
+  /* ---- All projects in one timeline (combined.js) ---- */
+  .home-titlebar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 28px; margin-bottom: 16px; }
+  .home-titlebar .home-title { margin: 0; }
+  .combo { --labels-w: 0px; } /* (no task list: the header's labels stick to the left edge) */
+  /* The projects that aren't on the timeline, as chips under the title row (none: nothing there) */
+  .combo-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; }
+  .combo-chart { border-top: none; }
+  /* A project that isn't on the timeline: drag it there to see it (its chip then
+     leaves the row), or click it to open it */
+  .pick { display: inline-flex; align-items: center; max-width: 240px; padding: 6px 14px; border: 1px solid var(--line);
+          border-radius: 999px; background: var(--panel); color: var(--text); font-size: 13px; cursor: grab;
+          user-select: none; touch-action: none; }
+  .pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick:hover { border-color: var(--accent); }
+  .pick.dragging { opacity: .4; }
+  .pick-ghost { position: fixed; z-index: 60; pointer-events: none; transform: translate(-50%, -50%) rotate(-2deg);
+                box-shadow: 0 8px 24px rgba(27,31,59,.3); cursor: grabbing; }
+  /* The timeline while a chip is dragged: a place to drop it */
+  .combo-chart { transition: box-shadow .15s; }
+  .combo-chart.drop-ready { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .combo-chart.drop-over { box-shadow: 0 0 0 3px var(--accent); }
+  .combo-empty { min-height: 160px; display: flex; align-items: center; justify-content: center; text-align: center; }
+  /* A project's row: its name (opens it) and ✕ (off the timeline) */
+  .combo-head { position: sticky; left: 0; z-index: 3; display: inline-flex; align-items: center; max-width: 80vw; }
+  .combo-head .combo-name { position: static; padding-left: 0; }
+  .combo-remove { flex: none; width: 26px; height: 26px; margin-left: 4px; padding: 0; border: none; border-radius: 50%;
+                  background: none; color: var(--muted); font-size: 12px; }
+  .combo-remove:hover { background: var(--weekend); color: var(--text); }
+  .pick-none { font-size: 13px; color: var(--muted); }
+  .combo-scroll { overflow-x: auto; overflow-y: hidden; /* (sideways only: the page scrolls down) */
+                  background: var(--panel); } /* (square, unframed: like the chart in a project) */
+  .combo-track .bar { cursor: default; }
+  /* The header's height fits its levels: quarter, month, week, days (as in a project), fewer when zoomed out */
+  .combo-track > .head:not(:has(.day-label)) { height: 58px; }
+  .combo-track > .head:not(:has(.day-label, .hspan.week)) { height: 42px; }
+  /* A project's own row: its colour, its name (opens it) and a bar over its whole span */
+  .combo-project { position: relative; display: flex; align-items: center; height: 44px; background: var(--panel);
+                   border-top: 1px solid color-mix(in srgb, var(--muted) 45%, var(--line)); }
+  .combo-track > .head + .combo-project { border-top: none; }
+  .combo-dot { flex: none; width: 9px; height: 9px; margin-left: 2px; border-radius: 50%; background: var(--label); }
+  /* ✕ always shows; ⋮ when you point at the row (always, on a touch screen) */
+  @media (hover: hover) {
+    .combo-project .combo-more { opacity: 0; transition: opacity .12s; }
+    .combo-project:hover .combo-more, .combo-project .combo-more:focus-visible { opacity: 1; }
+  }
+  .combo-name { position: sticky; left: 0; z-index: 3; display: inline-flex; align-items: center; gap: 8px; height: 28px; max-width: 70vw;
+                padding: 0 14px; color: var(--text); font-weight: 700; font-size: 14px; text-decoration: none; }
+  .combo-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .combo-name:hover span { text-decoration: underline; }
+  .combo-name svg { flex: none; width: 16px; height: 16px; color: var(--muted); }
+  /* A group's name, on its row (there's no list to show it) */
+  .combo-tag { position: sticky; left: 8px; z-index: 3; display: inline-block; margin-top: 9px; padding: 0 6px; border-radius: 4px;
+               background: var(--panel); font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  .combo-none .combo-tag { color: var(--muted); font-weight: 400; }
+
+  /* ---- Labels (yours: group your projects, e.g. by customer) ---- */
+  .dot { flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--label); }
+  /* Grouped by label */
+  .home-tip { margin: 0 0 18px; padding: 10px 14px; border-radius: 10px; font-size: 13px; color: var(--text);
+              background: color-mix(in srgb, #b8b5ff 18%, var(--panel)); }
+  /* Choosing a label, and making one */
+  .label-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 14px; max-height: 40vh; overflow-y: auto; }
+  .label-row { display: flex; align-items: center; gap: 4px; }
+  .label-pick { flex: 1; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line);
+                border-radius: 10px; background: var(--panel); color: var(--text); text-align: left; }
+  .label-pick span { flex: 1; }
+  .label-pick:hover { background: var(--weekend); }
+  .label-pick.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); font-weight: 600; }
+  .label-pick b { color: var(--accent); }
+  .label-edit { width: 34px; height: 34px; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); }
+  .label-edit:hover { background: var(--weekend); color: var(--text); }
+  .cloud-label-edit > input { width: 100%; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+  .swatch { display: inline-flex; position: relative; cursor: pointer; }
+  .swatch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .swatch i { width: 28px; height: 28px; border-radius: 50%; background: var(--label); box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+  .swatch input:checked + i { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text); }
+  .swatch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .foot-buttons { display: flex; gap: 8px; }
+  @media (max-width: 760px) {
+  }
+
+  /* ---- Test mode (only at localhost) ---- */
+  .start-testing { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px dashed #d6d6d0; }
+  .start-test { flex: none; padding: 8px 14px; border: 1px dashed #8a8fa8; border-radius: 8px; background: #f5f5f2; color: #1d1d1f; font-weight: 600; }
+  .start-test:hover { background: #ecebf9; border-color: #4b49b8; }
+  .start-testing span { font-size: 12px; color: #6e6e73; line-height: 1.4; }
+  .test-bar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 10px;
+              max-width: calc(100vw - 24px); padding: 8px 10px 8px 16px; border-radius: 999px; background: #ffc145; color: #1b1f3b;
+              box-shadow: 0 6px 20px rgba(27,31,59,.3); font-size: 13px; }
+  .test-bar b { flex: none; white-space: nowrap; }
+  .test-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .test-bar button { flex: none; padding: 5px 12px; border: none; border-radius: 999px; background: rgba(27,31,59,.12); color: #1b1f3b; font-size: 13px; font-weight: 600; }
+  .test-bar button:hover { background: rgba(27,31,59,.22); }
+  @media (max-width: 760px) { .test-bar span { display: none; } .test-bar { bottom: 84px; flex-wrap: wrap; justify-content: center; border-radius: 16px; } }
+
+  /* All projects: + New project next to the title; a project's ⋮ on its timeline row */
+  .home-bar .home-new { flex: none; align-self: center; margin: 0; padding: 9px 18px 9px 14px; border-radius: 21px; gap: 8px;
+                        background: #ffc145; color: #1b1f3b; font-size: 14px; box-shadow: none; }
+  .home-bar .home-new span { color: #1b1f3b; font-size: 20px; }
+  .home-bar .home-new:hover { background: #ffd06b; }
+  @media (max-width: 760px) { /* (a phone: the round button at the bottom, as before) */
+    .home-bar .home-new { position: fixed; right: 16px; bottom: 20px; z-index: 20; padding: 14px 20px 14px 16px; border-radius: 18px;
+                          background: #1b1f3b; color: #fff; font-size: 15px; box-shadow: 0 6px 20px rgba(27,31,59,.35); }
+    .home-bar .home-new span { color: #ffc145; font-size: 22px; }
+    .home-bar .home-new:hover { background: #2a2f55; }
+  }
+  .combo-more { flex: none; width: 26px; height: 26px; margin-left: 2px; padding: 0; border: none; border-radius: 50%;
+                background: none; color: var(--muted); font-size: 16px; line-height: 1; }
+  .combo-more:hover { background: var(--weekend); color: var(--text); }
+  .home.guest .home-new { display: none; }
+
+  /* The task list's right edge: drag it to make the list wider or narrower, or
+     almost shut to fold it into a thin strip (app.js) */
+  .list-grip { position: absolute; top: 0; bottom: 0; right: -5px; width: 9px; z-index: 7; cursor: col-resize; touch-action: none; }
+  .list-grip::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; background: var(--accent);
+                      opacity: 0; transition: opacity .15s; }
+  .list-grip:hover::after, html.list-resizing .list-grip::after { opacity: 1; }
+  html.list-resizing, html.list-resizing * { cursor: col-resize !important; user-select: none; }
+  /* Folded: a thin strip with only the rows' colours; click or drag it to open the list */
+  html.list-folded .labels .row > * { visibility: hidden; }
+  html.list-folded .labels .row, html.list-folded .labels .head { padding: 0; }
+  html.list-folded .labels .row.selected { box-shadow: none; }
+  html.list-folded .list-grip { right: -5px; width: calc(100% + 5px); cursor: pointer; }
+  html.list-folded .labels > .head::after { content: '›'; display: block; width: 100%; text-align: center; color: var(--muted); font-size: 16px; }
+  html.list-folded .labels:hover > .head::after { color: var(--text); }
+
+  /* ---- All projects: a calm timeline (for looking, not for placing tasks) ----
+     Only a faint line where each week starts and soft weekends; no day or row
+     lines. Names start at the timeline's left edge, under the title. Bars in a
+     soft version of their group's colour; a group is just its name in grey.
+     Some room between projects, with a thin line. */
+  .track.combo-track .day { border-left-color: transparent; }
+  .track.combo-track .day.week-start { border-left-color: color-mix(in srgb, var(--line) 70%, transparent); }
+  .track.combo-track .day.month-start { border-left-color: var(--line); }
+  .track.combo-track .day.weekend { background: color-mix(in srgb, var(--weekend) 55%, transparent); }
+  .combo-track .day-label { border-left: none; background: none !important; }
+  .combo-track > .row { border-bottom: none; }
+  .combo-track > .row:not(.combo-project) { height: 32px; }
+  .combo-track > .row.combo-group { height: 24px; }
+  .combo-track .bar { top: 6px !important; height: 20px !important; font-weight: 500;
+                      background: color-mix(in srgb, var(--bar) 38%, var(--panel)); color: var(--text); }
+  .combo-track .bar .progress { background: color-mix(in srgb, var(--bar) 60%, var(--panel)); }
+  .combo-track .combo-project { height: auto; padding: 22px 0 6px; background: none; border-top: 1px solid var(--line); }
+  .combo-track > .head + .combo-project { padding-top: 12px; }
+  .combo-head { padding-right: 8px; background: var(--panel); }
+  .combo-track .combo-tag { left: 0; margin-top: 3px; padding: 0 8px 0 0; border-radius: 0; font-size: 12px; font-weight: 400; }
+  .combo-name { padding: 0; }
+
+  /* ---- A calmer chart in a project too ----
+     Day lines very faint (a clear line only where a week or month starts), soft
+     weekends, no lines between the rows in the timeline (the list keeps its rows),
+     and plain day numbers in the header. (The All projects timeline above is
+     calmer still: no day lines at all.) */
+  .track .day { border-left-color: color-mix(in srgb, var(--line) 35%, transparent); }
+  .track .day.week-start { border-left-color: var(--line); }
+  .track .day.month-start { border-left-color: color-mix(in srgb, var(--muted) 45%, var(--line)); }
+  .track .day.weekend { background: color-mix(in srgb, var(--weekend) 55%, transparent); }
+  .track .day-label { border-left: none; background: none; }
+  .track > .row { border-bottom-color: transparent; }
+
+  /* All projects: the date header sticks under the top bar while the page scrolls */
+  .combo-headwrap { position: sticky; top: 64px; z-index: 6; overflow: hidden; background: var(--panel); }
+  .combo-headwrap .track > .head { position: relative; }
+  @media (max-width: 760px) { .combo-headwrap { top: 58px; } }
+
+  /* ---- All projects by colour, packed tightly ----
+     A heading per label, a slim name row per project, and its tasks packed onto
+     as few lines as fit, all in the label's colour. */
+  .combo-track > .row.combo-section { height: 34px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .combo-track > .head + .row.combo-section { border-top: none; padding-top: 6px; }
+  .combo-section-name { position: sticky; left: 0; z-index: 3; display: inline-flex; align-items: center; gap: 8px; padding-right: 8px;
+                        background: var(--panel); font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+  .combo-track .combo-project { height: 28px; padding: 6px 0 0; border-top: none; }
+  .combo-track > .head + .combo-project { padding-top: 6px; }
+  .combo-track .combo-name { height: 22px; font-size: 13px; }
+  .combo-track .combo-name svg { width: 14px; height: 14px; }
+  .combo-track .combo-remove, .combo-track .combo-more { width: 22px; height: 22px; }
+  .combo-track > .row.combo-lane { position: relative; height: 24px; }
+  .combo-track .combo-lane .bar { top: 3px !important; height: 18px !important; padding: 0 6px; font-size: 11.5px;
+                                  background: color-mix(in srgb, var(--bar) 35%, var(--panel)); color: var(--text); }
+  .combo-track .combo-lane .bar .progress { background: color-mix(in srgb, var(--bar) 65%, var(--panel)); }
+  .combo-track .combo-lane .bar .label { overflow: visible; }
+  .combo-track .combo-lane:last-child { margin-bottom: 8px; }
+  .combo-track > .row.combo-none { height: 22px; }
+  .combo-track .combo-none .combo-tag { margin-top: 2px; }
+
+  /* All projects: the names are on the chips. A chip on the timeline is filled
+     with its bars' colour (with ✕); one that isn't has a dashed outline. Pointing
+     at a chip brings out its bars. A thin line starts each project on the
+     timeline, a little more room each label. */
+  .pick.on { gap: 2px; padding: 3px 4px 3px 12px; cursor: pointer; color: var(--text);
+             background: color-mix(in srgb, var(--label) 35%, var(--panel)); border-color: color-mix(in srgb, var(--label) 75%, var(--panel)); }
+  .pick.on:hover { border-color: var(--label); }
+  .pick:not(.on) { border-style: dashed; color: var(--muted); }
+  .pick:not(.on):hover { color: var(--text); }
+  .pick-x { flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: none;
+            color: var(--text); opacity: .6; font-size: 11px; line-height: 1; }
+  .pick-x:hover { opacity: 1; background: color-mix(in srgb, var(--label) 55%, var(--panel)); }
+  .combo-track > .row.combo-lane.proj-start { border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+  .combo-track > .row.combo-lane.label-start { margin-top: 10px; border-top: 1px solid var(--line); }
+  .combo-track > .row.combo-lane { height: 26px; }
+  .combo-track .combo-lane .bar { top: 4px !important; }
+  .combo-chart .combo-lane .bar { transition: opacity .15s; }
+  .combo-chart.focusing .combo-lane:not(.hl) .bar { opacity: .25; }
+
+  /* All projects: a faint line for every day again (as in a project), so a bar's
+     dates can be followed up to the header; pointing at a bar marks its days there */
+  .track.combo-track .day { border-left-color: color-mix(in srgb, var(--line) 45%, transparent); }
+  .combo-hl { position: absolute; bottom: -1px; height: 3px; z-index: 2; border-radius: 2px; background: var(--today); pointer-events: none; }
+  .combo-track .day-label.edge { color: var(--text); font-weight: 700; }
+  .combo-hl[hidden] { display: none; }
+  .combo-headwrap .head > :not(.combo-hl) { z-index: 1; }
+
+  /* A project in focus (pointing at its chip or a bar): its chip gets a ring, the other chips fade */
+  .combo-pick .pick { transition: opacity .15s, box-shadow .15s; }
+  .combo-pick.focusing .pick:not(.hl) { opacity: .4; }
+  .pick.on.hl { border-color: var(--label); box-shadow: 0 0 0 2px color-mix(in srgb, var(--label) 55%, transparent); }
+
+  /* A chip: click to show / hide on the timeline; its pen opens the project */
+  .pick { gap: 2px; padding: 3px 4px 3px 12px; cursor: pointer; }
+  .pick-edit { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+               border-radius: 50%; color: var(--text); opacity: .55; }
+  .pick-edit:hover { opacity: 1; background: color-mix(in srgb, var(--label) 50%, var(--panel)); }
+  .pick:not(.on) .pick-edit:hover { background: var(--weekend); }
+  .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* All projects: the toolbar between the chips and the timeline, as in a project */
+  .combo-toolbar { margin: 0 0 12px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); } /* (set apart from the chips above, and a line under it with room before the timeline, as in a project) */
+  .combo-pick { margin-bottom: 16px; }
+  .home.guest #newProjectBtn { display: none; }
+
+  /* A project's toolbar: between thin lines, set apart from the title and the chart */
+  .chart-panel > .toolbar { padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 12px; } /* (thin lines above and below, as on All projects, with room before the chart so the lines don't touch) */
+
+  /* A project: its name as the page's title, with the dot for its colour on All
+     projects (click to choose it) and where it's kept */
+  .project-title { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0 18px; min-width: 0; }
+  .project-title h1 { margin: 0; font-size: 24px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .project-dot { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: none; background: var(--dot, #9a9aa0);
+                 box-shadow: 0 0 0 3px var(--panel), 0 0 0 4px var(--line); }
+  .project-dot:hover, .project-dot[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px var(--accent); }
+  html.read-only .project-dot { cursor: default; box-shadow: none; }
+  html:not(.cloud) .project-dot-wrap { display: none; } /* (no All projects page without accounts) */
+  .color-pop { width: 248px; padding: 12px; gap: 10px; }
+  .color-pop-head { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .color-swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .color-swatches button { width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: var(--c);
+                           box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+  .color-swatches button.on, .color-swatches button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text); }
+  .color-custom { display: flex; gap: 8px; align-items: center; }
+  .color-custom input[type=color] { flex: none; width: 40px; height: 34px; padding: 2px; cursor: pointer; }
+  #colorHex { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
+  .color-pop .error { margin: -6px 0 0; min-height: 0; }
+  .color-pop .link-like { align-self: flex-start; font-size: 13px; }
+  .color-pop .link-like[hidden] { display: none; }
+  @media (max-width: 640px) { .project-title { margin: 4px 0 12px; } .project-title h1 { font-size: 20px; } }
+
+  /* "Move the tasks that come after it?" with linked tasks: two answers as big buttons */
+  .choice-btns { display: flex; flex-direction: column; gap: 8px; }
+  .choice-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; padding: 12px 14px;
+                border-radius: 10px; text-align: left; }
+  .choice-btn b { font-size: 15px; }
+  .choice-btn small { color: var(--muted); font-size: 13px; line-height: 1.4; }
+  .choice-btn:hover, .choice-btn:focus-visible { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); outline: none; }
+  .choice-btn.primary-choice { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  #shiftDialog .actions[hidden] { display: none; }
+
+  /* Task names in the reschedule dialog's answers: in italics, a little darker */
+  .choice-btn small i { font-style: italic; color: var(--text); }
+
+  /* The reschedule dialog: task names in italics at the top too; Cancel under the answers */
+  #shiftText i { color: var(--text); }
+  .choice-cancel { margin-top: 12px; }
+
+  /* Undo / Redo and Save in a project's toolbar */
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 7px 10px; }
+  .icon-btn:disabled { color: var(--muted); opacity: .45; cursor: default; }
+  .save-btn { min-width: 76px; color: var(--muted); }
+  .save-btn.dirty { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .save-btn.dirty:hover { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+  .save-btn.restored { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  html.read-only .history, html.read-only .save-btn { display: none; }
+
+  /* The date header: click a quarter, month, week or day to show it (the one shown is underlined) */
+  .track > .head .hspan, .track > .head .day-label { cursor: pointer; }
+  .track > .head .hspan:hover > span, .track > .head .day-label:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .track > .head .hspan.shown > span, .track > .head .day-label.shown { color: var(--accent); font-weight: 700; }
+  .t-period-label[data-view], .t-date[data-view] { cursor: pointer; }
+  .t-period-label { pointer-events: auto; } /* (the box around it lets taps through to the days) */
+  /* ‹ Today › and Overview */
+  #viewBtns { gap: 2px; }
+  .overview-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  /* Collapse all / Expand all, above the task list */
+  html.list-folded .labels > .head > .fold-all, html.list-folded .labels > .head > .list-title { display: none; }
+  /* The Export menu opens to the left, so it never sticks out past the page */
+  #exportMenu { left: auto; right: 0; }
+
+  /* ‹ and › at the two ends of the chart's date header: a period back / forward */
+  .chart-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  html.phone-chart .chart-wrap { display: none; }
+  .edge-nav { position: absolute; top: 0; z-index: 8; width: 26px; height: 76px; padding: 0; border: none; border-radius: 0;
+              background: var(--panel); color: var(--muted); font-size: 22px; line-height: 1; }
+  .edge-nav.prev { left: var(--labels-w); border-left: 1px solid var(--line); }
+  .edge-nav.next { right: var(--sbw, 0px); }
+  .edge-nav:hover { background: var(--weekend); color: var(--text); }
+  .chart-wrap .hspan > span { left: calc(var(--labels-w) + 26px); } /* (the labels stop just right of ‹) */
+  .export .hspan > span { left: auto; }
+
+  /* The date header: no line before each week's label, and the day names start
+     where the week's label does (left-aligned, the same 4px in) */
+  .track .hspan { border-left: none; } /* (no lines before the quarter, month and week labels: they all start the same 4px in) */
+  .track .day-label { text-align: left; padding-left: 4px; overflow: hidden; white-space: nowrap; }
+
+  /* Collapse | Expand sits at the bottom of the list's header, right above the first group */
+  .labels > .head:has(.fold-all) { align-items: flex-end; justify-content: flex-start; padding-bottom: 6px; }
+
+  /* The first, partly shown quarter / month / week: its label pinned at the left edge */
+  .track > .head .head-pin { width: auto; overflow: visible; }
+  .track > .head .head-pin > span { position: static; }
+
+  /* ---- The task list: calm rows, the circles shine ----
+     White rows with thin dividers instead of coloured ones. Each task's circle is
+     thin, in its group's colour (filled with a tick when done; a ring that fills
+     as subtasks are ticked); milestones stay filled diamonds. Groups: a grey
+     chevron (∨ open, › collapsed), a dot in the group's colour and the name in
+     bold. At the top, "∨ Tasks": its chevron collapses / expands every group. */
+  .labels .row, .labels .row.grouped, .labels .row.group-row { background: var(--panel); color: var(--text);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent); }
+  .labels .row:hover { background: color-mix(in srgb, var(--weekend) 60%, var(--panel)); }
+  .labels .row.group-row { font-weight: 700; font-size: 14px; }
+  .labels .row.group-row .count { color: var(--muted); font-weight: 500; }
+  .labels .row button { color: var(--muted); opacity: 1; }
+  .labels .row button:hover { color: var(--text); }
+  .chev { display: block; transition: transform .15s; }
+  .shut > .chev { transform: rotate(-90deg); }
+  .labels .row .toggle { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+  .group-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--bar); }
+  .labels .row .status { --ring: var(--bar); width: 18px; height: 18px; border-width: 1.5px; background: var(--panel);
+                         line-height: 15px; font-size: 10px; }
+  .labels .row:not(.grouped) .status { --ring: var(--bar); }
+  .labels .row button.status:hover { background: color-mix(in srgb, var(--ring) 22%, var(--panel)); }
+  .labels .row .status.checked, .labels .row button.status.checked:hover { background: var(--ring); color: #fff; }
+  .labels .row .status.ring, .labels .row button.status.ring:hover {
+    background: conic-gradient(var(--ring) calc(var(--pct) * 1%), color-mix(in srgb, var(--ring) 30%, var(--panel)) 0); }
+  .labels .row .status.ring::after { inset: 2.5px; background: var(--panel); }
+  .labels .row.selected { box-shadow: inset 3px 0 0 var(--bar); }
+  .labels .row .ms-icon { background: var(--bar); }
+  .labels .row.sub-row input[type=checkbox] { accent-color: var(--bar); }
+  /* The heading */
+  .labels > .head:has(.fold-all), .labels > .head:has(.list-title) { align-items: flex-end; justify-content: flex-start; padding-bottom: 6px; }
+  .fold-all, .list-title { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: none;
+                           color: var(--text); font-size: 17px; font-weight: 700; }
+  .fold-all .chev { color: var(--muted); width: 18px; height: 18px; }
+  .fold-all:hover .chev { color: var(--text); }
+  /* (folded into a strip, the list still shows its groups' colours) */
+  html.list-folded .labels .row { background: var(--bar); }
+  .labels .row.task-row > span { font-weight: 500; } /* (task names lighter than the bold group names) */
+
+  /* Subtasks hang from their task's circle: a line in the group's colour runs
+     down from under the circle and branches off (with a rounded corner) to each
+     subtask's tick box; it ends at the last one */
+  .labels .row { --stem: 17px; }            /* (the middle of the task's circle) */
+  .labels .row.grouped { --stem: 31px; }
+  .labels .row.task-row:has(+ .sub-row) { position: relative; }
+  .labels .row.task-row:has(+ .sub-row)::after { content: ''; position: absolute; left: calc(var(--stem) - 1px); top: calc(50% + 9px); bottom: -1px;
+                                                 border-left: 2px solid var(--bar); }
+  .labels .row.sub-row::before { left: calc(var(--stem) - 1px); top: -1px; bottom: -1px; border-left: 2px solid var(--bar); }
+  .labels .row.sub-row:not(:has(+ .sub-row))::before { bottom: 50%; }
+  .labels .row.sub-row::after { content: ''; position: absolute; left: calc(var(--stem) - 1px); top: calc(50% - 8px); height: 8px;
+                                width: calc(42px - var(--stem) - 4px); border-left: 2px solid var(--bar); border-bottom: 2px solid var(--bar);
+                                border-bottom-left-radius: 7px; pointer-events: none; }
+  .labels .row.sub-row::before { pointer-events: none; }
+  /* (straight lines with square corners: a ├ to each subtask, └ at the last one) */
+  .labels .row.sub-row::after { top: calc(50% - 1px); height: 0; border-left: none; border-bottom: none; border-top: 2px solid var(--bar);
+                                border-radius: 0; left: calc(var(--stem) - 1px); width: calc(42px - var(--stem) - 3px); }
+  .labels .row.sub-row:not(:has(+ .sub-row))::before { bottom: calc(50% - 1px); }
+
+  /* A task's name with its subtask count right after it, "Visual design (1/2)";
+     the icons after it (links, +, ✕, comments) line up at the right */
+  .labels .row .name-wrap { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 5px; overflow: hidden; }
+  .labels .row .name-wrap > .name { flex: 0 1 auto; margin-right: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .labels .row .name-wrap > .sub-count { flex: none; }
+  /* A subtask's number (to refer to it in comments) */
+  .sub-no, .sheet-sub-no { flex: none; min-width: 14px; text-align: right; color: var(--muted); font-size: 11px; font-weight: 600;
+                           font-variant-numeric: tabular-nums; }
+  .labels .row.sub-row .sub-no { margin-right: -1px; }
+  .sheet-sub-no { font-size: 12px; }

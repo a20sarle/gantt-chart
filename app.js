@@ -2,22 +2,74 @@ const STORAGE_KEY = 'simple-gantt-tasks';
 const DAY = 86400000;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
+// With Firebase set up (firebase-config.js), you sign in and have two kinds of
+// projects: online ones, opened as ?p=<id> (collab.js loads and saves them),
+// and ones kept on this computer only, opened as ?local=<id> (saved in this
+// browser, see "Projects on this computer" below). Without Firebase, the one
+// project lives in this browser.
+const CLOUD = !!window.GANTT_FIREBASE;
+// Test mode (start page → Test mode, only at localhost): example data instead of
+// Firebase (test-cloud.js), and its own place for projects on this computer
+const TEST_MODE = CLOUD && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
+  && (() => { try { return localStorage.getItem('worknest-test-mode') === '1'; } catch { return false; } })();
+const params = new URLSearchParams(location.search);
+const LOCAL_ID = CLOUD ? params.get('local') : null;
+const ONLINE_ID = CLOUD && !LOCAL_ID ? params.get('p') : null;
+let readOnly = false;  // set by collab.js when viewing someone else's project: comments only
+let cloudSave = null;  // set by collab.js for the owner: sends the project's changes online
+// per-device settings, kept per project
+const perProject = key => ONLINE_ID ? `${key}:${ONLINE_ID}` : LOCAL_ID ? `${key}:local:${LOCAL_ID}` : key;
+
+// ---- Projects on this computer (with Firebase set up) ----
+// The list is in LOCAL_LIST_KEY ([{ id, name, updated }]) and each project in
+// `simple-gantt-local:<id>` ({ name, tasks, groupColors }). The one project
+// kept in the browser from before (STORAGE_KEY etc.) joins the list once.
+const LOCAL_LIST_KEY = TEST_MODE ? 'worknest-test:local-projects' : 'simple-gantt-local-projects';
+const localKey = id => TEST_MODE ? `worknest-test:local:${id}` : `simple-gantt-local:${id}`;
+const readJson = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
+function listLocal() {
+  if (!TEST_MODE && !readJson('simple-gantt-local-migrated')) {
+    const old = readJson(STORAGE_KEY);
+    try { localStorage.setItem('simple-gantt-local-migrated', 'true'); } catch {}
+    if (Array.isArray(old) && old.length) {
+      writeLocal('browser', { name: localStorage.getItem('simple-gantt-name') || 'My project', tasks: old,
+        groupColors: readJson('simple-gantt-group-colors') || {} }, 0);
+    }
+  }
+  return (readJson(LOCAL_LIST_KEY) || []).filter(p => readJson(localKey(p.id)));
+}
+const readLocal = id => readJson(localKey(id));
+function writeLocal(id, data, updated = Date.now()) {
+  localStorage.setItem(localKey(id), JSON.stringify(data));
+  const list = (readJson(LOCAL_LIST_KEY) || []).filter(p => p.id !== id);
+  list.push({ id, name: data.name, updated }); // (0: not known)
+  localStorage.setItem(LOCAL_LIST_KEY, JSON.stringify(list));
+}
+function deleteLocal(id) {
+  try {
+    localStorage.removeItem(localKey(id));
+    localStorage.setItem(LOCAL_LIST_KEY, JSON.stringify((readJson(LOCAL_LIST_KEY) || []).filter(p => p.id !== id)));
+  } catch {}
+}
+const localProject = LOCAL_ID ? readLocal(LOCAL_ID) : null; // (null: not on this computer)
+
 const COLORS_KEY = 'simple-gantt-group-colors';
-let tasks = load();
-let groupColors = loadGroupColors();
+let tasks = CLOUD ? (localProject ? localProject.tasks || [] : []) : load();
+let groupColors = CLOUD ? (localProject ? localProject.groupColors || {} : {}) : loadGroupColors();
 
 // ---- Project name (click the heading to rename) ----
 const NAME_KEY = 'simple-gantt-name';
 const DEFAULT_NAME = 'My project';
 const nameEl = document.getElementById('projectName');
-let projectName = (() => { try { return localStorage.getItem(NAME_KEY) || DEFAULT_NAME; } catch { return DEFAULT_NAME; } })();
+let projectName = localProject ? localProject.name : CLOUD ? 'Loading…' : (() => { try { return localStorage.getItem(NAME_KEY) || DEFAULT_NAME; } catch { return DEFAULT_NAME; } })();
 function showProjectName() {
   nameEl.textContent = projectName;
-  document.title = `${projectName} · Simple Gantt`;
+  document.title = `${projectName} · WorkNest`;
 }
 function setProjectName(name) {
+  const before = projectName;
   projectName = name.trim().replace(/\s+/g, ' ') || DEFAULT_NAME;
-  try { localStorage.setItem(NAME_KEY, projectName); } catch {}
+  if (projectName !== before) save(); // (a change like any other: saved with Save)
   showProjectName();
 }
 nameEl.addEventListener('keydown', e => {
@@ -26,6 +78,61 @@ nameEl.addEventListener('keydown', e => {
 });
 nameEl.addEventListener('blur', () => setProjectName(nameEl.textContent));
 showProjectName();
+
+// ---- The project's colour on All projects: the dot after its name ----
+// Saved with the project (so it's the same for everyone who sees it). Without
+// one, the project takes its label's colour there (grey without a label). Click
+// the dot to pick a colour: a swatch, any colour, or a hex code.
+const COLOR_KEY = 'simple-gantt-color';
+const NO_COLOR = '#9a9aa0';
+let projectColor = localProject ? localProject.color || '' : CLOUD ? '' : (() => { try { return localStorage.getItem(COLOR_KEY) || ''; } catch { return ''; } })();
+const colorBtn = document.getElementById('colorBtn'), colorPop = document.getElementById('colorPop');
+const colorHex = document.getElementById('colorHex'), colorNative = document.getElementById('colorNative');
+const HEX = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i;
+const normHex = v => { let h = v.trim().replace(/^#/, '').toLowerCase(); if (h.length === 3) h = [...h].map(c => c + c).join(''); return '#' + h; };
+function drawProjectColor() {
+  const label = window.collab?.labelColor?.() || '';
+  const shown = projectColor || label || NO_COLOR;
+  colorBtn.style.setProperty('--dot', shown);
+  colorBtn.classList.toggle('unset', !projectColor);
+  colorBtn.title = readOnly ? "This project's colour on All projects (its owner chooses it)"
+    : `This project's colour on All projects${projectColor ? '' : label ? " (its label's colour)" : ' (none chosen yet)'}. Click to change it`;
+  colorBtn.setAttribute('aria-label', colorBtn.title);
+  for (const b of colorPop.querySelectorAll('[data-color]')) b.classList.toggle('on', b.dataset.color === projectColor);
+  if (document.activeElement !== colorHex) colorHex.value = projectColor;
+  colorNative.value = shown.length === 7 ? shown : NO_COLOR;
+  document.getElementById('colorReset').hidden = !projectColor;
+  document.getElementById('colorReset').textContent = label ? "Use the label's colour" : 'No colour';
+}
+function setProjectColor(c) {
+  if (readOnly || c === projectColor) return;
+  projectColor = c;
+  drawProjectColor();
+  save();
+}
+function showColorPop(open) {
+  if (open && readOnly) return;
+  colorPop.hidden = !open;
+  colorBtn.setAttribute('aria-expanded', open);
+  document.getElementById('colorError').textContent = '';
+  if (open) { drawProjectColor(); (colorPop.querySelector('.on') || colorHex).focus(); }
+}
+colorBtn.addEventListener('click', () => showColorPop(colorPop.hidden));
+colorPop.addEventListener('click', e => {
+  const sw = e.target.closest('[data-color]');
+  if (sw) { setProjectColor(sw.dataset.color); return showColorPop(false); }
+  if (e.target.closest('#colorReset')) { setProjectColor(''); showColorPop(false); }
+});
+colorNative.addEventListener('input', () => { setProjectColor(colorNative.value.toLowerCase()); colorHex.value = projectColor; });
+colorHex.addEventListener('input', () => {
+  const ok = HEX.test(colorHex.value.trim());
+  document.getElementById('colorError').textContent = ok || colorHex.value.trim().length < 4 ? '' : 'Use a hex code like #4f8ff7';
+  if (ok) setProjectColor(normHex(colorHex.value));
+});
+colorHex.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (HEX.test(colorHex.value.trim())) showColorPop(false); } });
+document.addEventListener('pointerdown', e => { if (!colorPop.hidden && !e.target.closest('.project-dot-wrap')) showColorPop(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !colorPop.hidden) { showColorPop(false); colorBtn.focus(); } });
+drawProjectColor();
 
 const chartEl = document.getElementById('chart');
 
@@ -36,7 +143,34 @@ function load() {
     return raw === null ? null : JSON.parse(raw) || [];
   } catch { return null; }
 }
-function save() {
+// ---- Changes, Undo / Redo and Save ----
+// Changes are a draft until you click Save. Each change calls save() (below):
+// it records a step for Undo and keeps the draft in this browser, so it
+// survives a reload or a crash and is offered back when the project opens
+// again. Save (the button, or Ctrl+S) stores it where the project lives:
+// online, on this computer, or in this browser. Leaving with unsaved changes
+// asks first. Undo / Redo (Ctrl+Z / Ctrl+Shift+Z) step through every change
+// since the page opened, saved or not.
+const DRAFT_KEY = `${TEST_MODE ? 'worknest-test:' : ''}worknest-draft:${ONLINE_ID ? `p:${ONLINE_ID}` : LOCAL_ID ? `local:${LOCAL_ID}` : 'browser'}`;
+const stateJSON = () => JSON.stringify({ name: projectName, color: projectColor || '', tasks, groupColors });
+let savedState = null; // (the project as last saved or loaded; null until loaded)
+let lastState = null;  // (the project after the last recorded change)
+const undoStack = [], redoStack = [];
+let savingNow = false;
+const isDirty = () => savedState !== null && stateJSON() !== savedState;
+
+// Each subtask has a number within its task (1, 2, 3…), so it can be referred to
+// in the task's comments ("see 2"). A number is kept for good: a new subtask gets
+// the next one, and deleting one doesn't renumber the others.
+function numberSubtasks() {
+  for (const t of tasks) {
+    const subs = t.subtasks || [];
+    let next = Math.max(0, ...subs.map(s => s.no || 0)) + 1;
+    for (const s of subs) if (!s.no) s.no = next++;
+  }
+}
+function tidyAfterChange() {
+  numberSubtasks();
   syncGroupColors();
   // Forget collapsed state of groups that no longer exist
   const names = new Set(tasks.map(t => t.group || ''));
@@ -50,11 +184,112 @@ function save() {
     expanded = new Set([...expanded].filter(id => ids.has(id)));
     saveExpanded();
   }
+}
+
+// A change was made: a step for Undo, and the draft kept in this browser
+function save() {
+  if (readOnly) return;
+  tidyAfterChange();
+  const now = stateJSON();
+  if (lastState !== null && now !== lastState) {
+    undoStack.push(lastState);
+    if (undoStack.length > 300) undoStack.shift();
+    redoStack.length = 0;
+  }
+  lastState = now;
+  keepDraft();
+  drawSaveState();
+}
+function keepDraft() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    localStorage.setItem(COLORS_KEY, JSON.stringify(groupColors));
+    if (isDirty()) localStorage.setItem(DRAFT_KEY, JSON.stringify({ state: stateJSON(), base: savedState }));
+    else localStorage.removeItem(DRAFT_KEY);
   } catch {}
 }
+// Puts the project back to a recorded state (Undo / Redo, or a kept draft)
+function applyState(json) {
+  const s = JSON.parse(json);
+  tasks = s.tasks || []; groupColors = s.groupColors || {};
+  projectName = s.name || DEFAULT_NAME; projectColor = s.color || '';
+  showProjectName(); drawProjectColor();
+  lastState = json;
+  render();
+  if (sheet.open) drawSheet();
+  keepDraft();
+  drawSaveState();
+}
+function undo() {
+  if (readOnly || !undoStack.length) return;
+  redoStack.push(stateJSON());
+  applyState(undoStack.pop());
+}
+function redo() {
+  if (readOnly || !redoStack.length) return;
+  undoStack.push(stateJSON());
+  applyState(redoStack.pop());
+}
+// Save: stores the project where it lives
+async function saveProject() {
+  if (readOnly || savingNow || !isDirty()) return;
+  tidyAfterChange();
+  savingNow = true; drawSaveState();
+  let ok = true;
+  if (LOCAL_ID && localProject) { // a project on this computer
+    try { writeLocal(LOCAL_ID, { name: projectName, tasks, groupColors, color: projectColor }); } catch { ok = false; }
+  } else if (CLOUD) {
+    ok = cloudSave ? await cloudSave() : false; // (collab.js: sends it online)
+  } else {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      localStorage.setItem(COLORS_KEY, JSON.stringify(groupColors));
+      localStorage.setItem(NAME_KEY, projectName);
+      projectColor ? localStorage.setItem(COLOR_KEY, projectColor) : localStorage.removeItem(COLOR_KEY);
+    } catch { ok = false; }
+  }
+  savingNow = false;
+  if (ok) markSaved(); else drawSaveState();
+}
+// The project as it is now counts as saved (after Save, or when it's loaded:
+// then a kept draft stays until restoreDraft has looked at it)
+function markSaved(loading = false) {
+  tidyAfterChange();
+  savedState = lastState = stateJSON();
+  if (!loading) keepDraft();
+  drawSaveState();
+}
+// Opening the project: unsaved changes kept from last time come back (Undo goes back to the saved version)
+function restoreDraft() {
+  const d = readJson(DRAFT_KEY);
+  if (!d || typeof d.state !== 'string' || d.state === savedState || readOnly) return keepDraft();
+  undoStack.push(savedState);
+  applyState(d.state);
+  const b = document.getElementById('saveBtn');
+  b.classList.add('restored');
+  b.title = 'Your unsaved changes from last time are back. Save them, or Undo to go back to the saved version';
+}
+const saveBtn = document.getElementById('saveBtn');
+function drawSaveState() {
+  const dirty = isDirty();
+  saveBtn.classList.toggle('dirty', dirty);
+  saveBtn.textContent = savingNow ? 'Saving…' : dirty ? 'Save' : 'Saved';
+  if (!dirty) { saveBtn.classList.remove('restored'); saveBtn.title = 'All changes are saved'; }
+  else if (!saveBtn.classList.contains('restored')) saveBtn.title = 'You have unsaved changes. Save them (Ctrl+S)';
+  document.getElementById('undoBtn').disabled = !undoStack.length;
+  document.getElementById('redoBtn').disabled = !redoStack.length;
+}
+saveBtn.addEventListener('click', saveProject);
+document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('redoBtn').addEventListener('click', redo);
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || readOnly) return;
+  const k = e.key.toLowerCase();
+  if (k === 's') { e.preventDefault(); return saveProject(); }
+  const typing = e.target.closest?.('input, textarea, select, [contenteditable="plaintext-only"], [contenteditable="true"]');
+  if (typing || document.querySelector('dialog[open]:not(.sheet)')) return; // (their own undo while typing)
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+});
+addEventListener('beforeunload', e => { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
 // ---- Group colours: { groupName: paletteIndex }, kept so colours stay stable ----
 function loadGroupColors() {
@@ -146,15 +381,19 @@ const shiftTask = (t, days) => {
 };
 
 // When a task's end date moves, ask what to do with the tasks that come after it:
-// - linked tasks (and the rest of their chain): push only when needed, keep the
-//   same gap, or don't move (a task left starting too early gets a red arrow);
-// - other tasks that start later (not linked): move those in the same group,
-//   in all groups, or don't move.
+// - with linked tasks (an arrow from it, and the rest of their chain): a simple
+//   yes / no — move them all by the same number of days (their lengths stay the
+//   same, nothing before it moves), or only this task (one left starting too
+//   early gets a red arrow);
+// - otherwise, other tasks that start later (not linked): move those in the same
+//   group, in all groups, or don't move.
 // `task` can also stand for a whole group that was dragged ({ isGroup: true });
 // `exclude` holds the ids of tasks that already moved.
-async function offerToShiftFollowing(before, task, exclude = new Set([task.id])) {
+// The move itself is shown but only saved once it's decided: `undo` puts it
+// back if the dialog is cancelled. Resolves with false when cancelled.
+async function offerToShiftFollowing(before, task, exclude = new Set([task.id]), undo = null) {
   const delta = daysBetween(parse(before.end), parse(task.end));
-  if (!delta) return;
+  if (!delta) { save(); return true; }
   const movedIds = [...exclude];
   const linked = downstreamOf(movedIds).filter(t => !exclude.has(t.id))
     .sort((a, b) => a.start.localeCompare(b.start));
@@ -162,24 +401,35 @@ async function offerToShiftFollowing(before, task, exclude = new Set([task.id]))
   const later = tasks
     .filter(t => !exclude.has(t.id) && !linkedIds.has(t.id) && t.start > before.start)
     .sort((a, b) => a.start.localeCompare(b.start));
-  if (!linked.length && !later.length) return;
+  if (!linked.length && !later.length) { save(); return true; }
   const sameGroup = later.filter(t => (t.group || '') === task.group);
   const pushPlan = planPush(movedIds);
 
-  const choice = await askShift(task, delta, { linked, pushPlan, later, sameGroup });
+  const choice = await askShift(task, delta, { linked, pushPlan, later, sameGroup, before });
+  if (choice.cancel) { undo?.(); render(); return false; } // (Cancel: back where it was, nothing saved)
 
   if (choice.linked === 'push') pushPlan.forEach((days, id) => shiftTask(tasks.find(t => t.id === id), days));
   if (choice.linked === 'gap') linked.forEach(t => shiftTask(t, delta));
   const others = choice.others === 'group' ? sameGroup : choice.others === 'all' ? later : [];
   others.forEach(t => shiftTask(t, delta));
-  if (choice.linked !== 'gap' && !(choice.linked === 'push' && pushPlan.size) && !others.length) return;
-
   save(); render();
+  return true;
+}
+
+// What changed, in words: moved (same length), made longer / shorter (same
+// start), or both
+function whatHappened(task, before, delta) {
+  const days = n => `${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'}`;
+  const name = `${task.isGroup ? 'The group ' : ''}<i>${esc(task.name)}</i>`;
+  const moved = before && before.start && task.start ? daysBetween(parse(before.start), parse(task.start)) : delta;
+  if (moved === delta) return `${name} has been rescheduled ${days(delta)} ${delta > 0 ? 'later' : 'earlier'}.`;
+  if (!moved) return `${name}'s duration is now ${days(delta)} ${delta > 0 ? 'longer' : 'shorter'}, so it finishes ${days(delta)} ${delta > 0 ? 'later' : 'earlier'}.`;
+  return `${name} now finishes ${days(delta)} ${delta > 0 ? 'later' : 'earlier'}.`;
 }
 
 // Shows the "Move the tasks that come after?" dialog. Resolves with
-// { linked: 'push' | 'gap' | 'none', others: 'group' | 'all' | 'none' }.
-function askShift(task, delta, { linked, pushPlan, later, sameGroup }) {
+// { linked: 'gap' | 'none', others: 'group' | 'all' | 'none' }, or { cancel: true }.
+function askShift(task, delta, { linked, pushPlan, later, sameGroup, before }) {
   const dlg = document.getElementById('shiftDialog');
   const daysText = n => `${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'}`;
   const dir = delta > 0 ? 'later' : 'earlier';
@@ -189,21 +439,37 @@ function askShift(task, delta, { linked, pushPlan, later, sameGroup }) {
   const names = list => `<ul>${list.map(t => `<li>${esc(t.name)}</li>`).join('')}</ul>`;
   let html = '';
 
+  // Linked tasks: just two answers, as buttons
+  const actions = dlg.querySelector('.actions.reverse'); // (Apply / Cancel under the old dialog, not the Cancel inside the answers)
+  actions.hidden = !!linked.length;
   if (linked.length) {
-    const pushed = linked.filter(t => pushPlan.has(t.id));
-    const pushDetail = pushed.length
-      ? pushed.map(t => `${esc(t.name)} moves ${daysText(pushPlan.get(t.id))} later`).join(', ')
-      : 'There is enough room, so nothing needs to move';
-    const gapDetail = `${linked.length === 1 ? 'It moves' : linked.length === 2 ? 'Both move' : `All ${linked.length} move`} ${daysText(delta)} ${dir}`;
-    const noneDetail = pushed.length
-      ? `${pushed.length === 1 ? '1 task' : `${pushed.length} tasks`} will start too early (shown with a red arrow)`
-      : 'They stay where they are';
-    html += `<section><h3>Linked tasks</h3>${names(linked)}
-      ${option('linked', 'push', 'Push only when needed', pushDetail, true)}
-      ${option('linked', 'gap', 'Keep the same gap', gapDetail, false)}
-      ${option('linked', 'none', "Don't move", noneDetail, false)}
-    </section>`;
+    // In project-management terms, about the task that was moved (the
+    // predecessor): its successor tasks (finish-to-start dependencies, the rest
+    // of the chain included) are rescheduled with it, or keep their dates
+    const nm = n => `<i>${esc(n)}</i>`; // (a task's name in the answers: in italics, so it reads as a name)
+    const who = task.isGroup ? `The group ${nm(task.name)}` : nm(task.name);
+    const one = linked.length === 1, names = linked.map(t => nm(t.name)).join(', ');
+    const clash = linked.filter(t => pushPlan.has(t.id));
+    document.getElementById('shiftTitle').textContent = one ? 'Reschedule the successor task?' : `Reschedule the ${linked.length} successor tasks?`;
+    document.getElementById('shiftText').innerHTML = `${whatHappened(task, before, delta)} ${one
+      ? `It has a successor task: ${names}.` : `It has ${linked.length} successor tasks: ${names}.`}`;
+    document.getElementById('shiftList').innerHTML = `<div class="choice-btns">
+      <button value="gap" class="choice-btn primary-choice"><b>Yes, reschedule ${one ? 'the successor' : 'all successors'}</b>
+        <small>${one ? nm(linked[0].name) + ' moves' : 'They move'} ${daysText(delta)} ${dir} with ${who.replace('The group', 'the group')}. Durations and dependencies stay the same; predecessor tasks aren't affected.</small></button>
+      <button value="none" class="choice-btn"><b>No, only reschedule ${task.isGroup ? 'this group' : nm(task.name)}</b>
+        <small>${one ? 'The successor keeps its dates' : 'The successors keep their dates'}.${clash.length
+          ? ` ${clash.length === 1 ? nm(clash[0].name) + ' would then start' : `${clash.length} of them would then start`} before ${who.replace('The group', 'the group')} finishes: a dependency conflict (shown with a red arrow).` : ''}</small></button>
+    </div>
+    <div class="actions choice-cancel"><button value="cancel">Cancel</button></div>`;
+    return new Promise(resolve => {
+      dlg.returnValue = '';
+      dlg.addEventListener('close', () => resolve(dlg.returnValue === 'gap' || dlg.returnValue === 'none'
+        ? { linked: dlg.returnValue, others: 'none' } : { cancel: true }), { once: true }); // (Cancel or Escape: undo the move)
+      dlg.showModal();
+      dlg.querySelector('.choice-btn').focus();
+    });
   }
+
   if (later.length) {
     const byGroup = new Map([[task.group, []]]);
     for (const t of later) {
@@ -215,23 +481,23 @@ function askShift(task, delta, { linked, pushPlan, later, sameGroup }) {
       `<h4>${esc(groupLabel(g))}${g === task.group ? ' (this group)' : ''}</h4>${names(l)}`).join('');
     const hasOtherGroups = later.length > sameGroup.length;
     const count = n => `${n} task${n > 1 ? 's move' : ' moves'} ${daysText(delta)} ${dir}`;
-    html += `<section><h3>${linked.length ? 'Other tasks that come after (not linked)' : 'Tasks that come after'}</h3>${lists}
-      ${sameGroup.length ? option('others', 'group', hasOtherGroups ? 'Only this group' : 'Move them', count(sameGroup.length), !linked.length) : ''}
-      ${hasOtherGroups ? option('others', 'all', sameGroup.length ? 'All groups' : 'Move them', count(later.length), !linked.length && !sameGroup.length) : ''}
-      ${option('others', 'none', "Don't move", 'They stay where they are', !!linked.length)}
+    html += `<section><h3>Tasks that come after</h3>${lists}
+      ${sameGroup.length ? option('others', 'group', hasOtherGroups ? 'Only this group' : 'Move them', count(sameGroup.length), true) : ''}
+      ${hasOtherGroups ? option('others', 'all', sameGroup.length ? 'All groups' : 'Move them', count(later.length), !sameGroup.length) : ''}
+      ${option('others', 'none', "Don't move", 'They stay where they are', false)}
     </section>`;
   }
 
   document.getElementById('shiftTitle').textContent = 'Move the tasks that come after?';
   document.getElementById('shiftText').innerHTML =
-    `${task.isGroup ? 'The group ' : ''}<b>${esc(task.name)}</b> now ends ${daysText(delta)} ${dir}.`;
+    whatHappened(task, before, delta);
   document.getElementById('shiftList').innerHTML = html;
 
   return new Promise(resolve => {
     dlg.returnValue = '';
     dlg.addEventListener('close', () => {
-      const picked = name => dlg.returnValue === 'apply'
-        ? (dlg.querySelector(`input[name="${name}"]:checked`)?.value || 'none') : 'none';
+      if (dlg.returnValue !== 'apply') return resolve({ cancel: true }); // (Cancel or Escape: undo the move)
+      const picked = name => dlg.querySelector(`input[name="${name}"]:checked`)?.value || 'none';
       resolve({ linked: picked('linked'), others: picked('others') });
     }, { once: true });
     dlg.showModal();
@@ -295,7 +561,9 @@ function scrollToDay(day, offset = 0) {
 // (in the turned chart, the bands for new weeks/months/quarters take room too,
 // and the first day starts below the pinned quarter / month / week labels)
 const fitZoom = (startDay, days) => (timeLength() - (turnedOn()
-  ? Math.max(TURNED_STICKY, turnedBandsBetween(startDay, startDay)) + turnedBandsBetween(startDay + 1, startDay + days - 1) : 0)) / days;
+  ? Math.max(TURNED_STICKY, turnedBandsBetween(startDay, startDay)) + turnedBandsBetween(startDay + 1, startDay + days - 1)
+  : 2 * EDGE_NAV)) / days; // (on a computer: between ‹ and › at the ends of the date header)
+const edgeOffset = () => turnedOn() ? 0 : EDGE_NAV; // (the first day shown starts just right of ‹)
 const maxDayW = () => Math.max(60, timeLength());
 let zoom = 28;
 try { const z = +localStorage.getItem(ZOOM_KEY); if (z >= MIN_DAY_W && z <= 5000) zoom = z; } catch {}
@@ -344,32 +612,21 @@ function openView(v, date) {
   viewRange = p;
   const days = daysBetween(parse(p.start), parse(p.end)) + 1;
   setZoom(fitZoom(dayNumber(parse(p.start)), days), { keepView: true });
-  scrollToDay(dayNumber(parse(p.start)));
+  scrollToDay(dayNumber(parse(p.start)), edgeOffset());
   tidyHeaderLabels();
 }
 
-document.getElementById('viewMenu').addEventListener('click', e => {
-  const btn = e.target.closest('[data-view]');
-  if (btn) openView(btn.dataset.view, view ? viewDate : todayString());
-});
-
-// The view menu ("Week ▾"): opens on click; closes when an item is picked,
-// on a click elsewhere, or with Esc
-const viewMenuBtn = document.getElementById('viewMenuBtn');
-const viewMenu = document.getElementById('viewMenu');
-function showViewMenu(open) {
-  viewMenu.hidden = !open;
-  viewMenuBtn.setAttribute('aria-expanded', open);
-  if (open) (viewMenu.querySelector('.active') || viewMenu.querySelector('button')).focus();
+// Click a quarter, month, week or day in the date header to show just that
+// period (the labels carry data-view and data-date; on a phone too)
+function openHeaderPeriod(e) {
+  const el = e.target.closest('[data-view][data-date]');
+  if (!el || drag) return false;
+  if (overviewReturn) overviewReturn = null; // (leaving the overview)
+  openView(el.dataset.view, el.dataset.date);
+  render();
+  return true;
 }
-viewMenuBtn.onclick = () => showViewMenu(viewMenu.hidden);
-viewMenu.addEventListener('click', e => { if (e.target.closest('button')) showViewMenu(false); });
-document.addEventListener('pointerdown', e => {
-  if (!viewMenu.hidden && !e.target.closest('#viewBtns .menu-wrap')) showViewMenu(false);
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !viewMenu.hidden) { showViewMenu(false); viewMenuBtn.focus(); }
-});
+chartEl.addEventListener('click', e => { if (e.target.closest('.track > .head')) openHeaderPeriod(e); });
 
 // ‹ and ›: one period back or forward (one screen when zoomed freely)
 function step(dir) {
@@ -389,7 +646,7 @@ function scrollToToday() {
   scrollToDay(dayNumber(parse(todayString())), timeLength() / 4);
 }
 // Today: today's period in Day / Week / Month / Quarter, otherwise scroll to today
-document.getElementById('todayBtn').onclick = () => view ? openView(view, todayString()) : scrollToToday();
+document.getElementById('todayBtn')?.addEventListener('click', () => view ? openView(view, todayString()) : scrollToToday());
 
 // Overview: zoom so the whole project (first start to last end, plus a day on
 // each side) fits the visible width, and scroll to the top. Clicking again goes
@@ -408,7 +665,7 @@ document.getElementById('overviewBtn').onclick = () => {
   const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
   const days = daysBetween(first, last) + 1 + 2; // the project plus a day either side
   setZoom(fitZoom(dayNumber(first) - 1, days)); // setZoom keeps it within the zoom limits
-  scrollToDay(dayNumber(first) - 1);
+  scrollToDay(dayNumber(first) - 1, edgeOffset());
   chartEl.scrollTop = 0;
   overviewReturn = back;
   render(); // refresh the button
@@ -565,11 +822,6 @@ chartEl.addEventListener('touchmove', e => {
 }, { passive: false });
 chartEl.addEventListener('touchend', e => { if (e.touches.length < 2) pinch = null; });
 
-document.getElementById('clearBtn').onclick = async () => {
-  if (tasks.length && await askConfirm('Delete all tasks?', 'Every task, group and link will be removed. Export first if you want a copy.', 'Delete all')) {
-    tasks = []; save(); render();
-  }
-};
 // ---- Export menu: Image (.png), Calendar (.ics), JSON ----
 // Opens on click; closes when an item is picked, on a click elsewhere, or with Esc.
 const exportMenuBtn = document.getElementById('exportMenuBtn');
@@ -577,7 +829,7 @@ const exportMenu = document.getElementById('exportMenu');
 function showExportMenu(open) {
   exportMenu.hidden = !open;
   exportMenuBtn.setAttribute('aria-expanded', open);
-  if (open) exportMenu.querySelector('button').focus();
+  if (open) [...exportMenu.querySelectorAll('button')].find(b => b.offsetParent)?.focus(); // (the first one shown)
 }
 exportMenuBtn.onclick = () => showExportMenu(exportMenu.hidden);
 exportMenu.addEventListener('click', e => { if (e.target.closest('button')) showExportMenu(false); });
@@ -598,7 +850,7 @@ try { localStorage.removeItem('simple-gantt-phone-view'); } catch {} // from the
 function applyPhoneLayout() {
   document.documentElement.classList.toggle('phone-chart', phoneQuery.matches);
 }
-phoneQuery.addEventListener('change', () => { applyPhoneLayout(); render(); });
+phoneQuery.addEventListener('change', () => { applyPhoneLayout(); applyListWidth(); render(); });
 
 // ---- Phones: the Chart turned a quarter (time runs down) ----
 // On a phone, Chart shows the Gantt chart turned: dates run down the left side
@@ -689,7 +941,8 @@ function renderTurned(min, totalDays, zoomH, todayDate) {
     }
     for (const t of list) {
       const pct = progressOf(t), done = pct === 100 ? ' done' : '';
-      const extras = [(t.subtasks || []).length ? `${pct}%` : '', (t.links || []).length ? '📎' : ''].filter(Boolean).join(' ');
+      const comments = window.collab?.count(t.id) || 0;
+      const extras = [(t.subtasks || []).length ? `${pct}%` : '', (t.links || []).length ? '📎' : '', comments ? `💬${comments}` : ''].filter(Boolean).join(' ');
       bars += `<div class="t-bar${done}" data-id="${t.id}" style="left:${x + 4}px;width:${colW - 8}px;top:${topOf(t.start)}px;height:${bottomOf(t.end) - topOf(t.start)}px;--bar:${c.bg}"
         title="${esc(t.name)}: ${t.start} → ${t.end}">
         <span class="t-progress" style="height:${pct}%"></span>
@@ -714,15 +967,16 @@ function renderTurned(min, totalDays, zoomH, todayDate) {
       });
     }
     rows += `<div class="t-row${weekend}" style="top:${rowTop[i]}px;height:${H}px"></div>`;
-    dates += `<div class="t-date${weekend}" style="top:${rowTop[i]}px;height:${H}px">${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })}</div>`;
+    dates += `<div class="t-date${weekend}" data-view="day" data-date="${fmt(d)}" style="top:${rowTop[i]}px;height:${H}px">${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })}</div>`;
   }
   // Each quarter / month / week label sits in a box as tall as its period and
   // sticks to the top while you scroll through it (quarter, month, then week
   // under each other), until the next one pushes it away
   periods.forEach((list, level) => list.forEach((p, k) => {
     const top = bandTop[p.i], end = k + 1 < list.length ? bandTop[list[k + 1].i] : yPos;
+    const v = ['quarter', 'month', 'week'][level], from = periodOf(v, fmt(new Date(+min + p.i * DAY))).start;
     dates += `<div class="t-period" style="top:${top}px;height:${end - top}px">` +
-      `<span class="t-period-label l${level}" style="margin-top:${3 + p.line * BAND_LINE}px;top:${level * BAND_LINE}px">${p.text}</span></div>`;
+      `<span class="t-period-label l${level}" data-view="${v}" data-date="${from}" style="margin-top:${3 + p.line * BAND_LINE}px;top:${level * BAND_LINE}px">${p.text}</span></div>`;
   }));
   const todayAt = daysBetween(min, todayDate);
   const today = todayAt >= 0 && todayAt < totalDays ? `<div class="t-today" style="top:${rowTop[todayAt] + H / 2 - 1}px"></div>` : '';
@@ -736,6 +990,7 @@ function renderTurned(min, totalDays, zoomH, todayDate) {
 // Tap a bar: the task sheet. Tap a group's line: collapse or expand the group.
 turnedEl.addEventListener('click', e => {
   if (turnedPress?.done) { turnedPress = null; return; } // the end of a press-and-drag isn't a tap
+  if (e.target.closest('.t-dates') && openHeaderPeriod(e)) return; // (a quarter, month, week or day: show it)
   const line = e.target.closest('.t-gline[data-toggle]');
   if (line) return toggleGroup(line.dataset.toggle);
   const bar = e.target.closest('.t-bar[data-id]');
@@ -763,6 +1018,7 @@ function drawTurnedGhost() {
 }
 
 turnedEl.addEventListener('touchstart', e => {
+  if (readOnly) return; // viewing: tapping a task opens it, nothing is created
   if (turnedPress) { clearTimeout(turnedPress.timer); turnedPress.active && turnedEl.querySelector('.t-ghost')?.remove(); turnedPress = null; }
   if (e.touches.length !== 1 || e.target.closest('.t-bar, .t-gline')) return;
   const t = e.touches[0];
@@ -846,29 +1102,32 @@ let sheetAdding = null;   // what is being added: 'sub', 'link:task' or 'link:<s
 
 let sheetOpenedAt = 0;
 let sheetNew = null; // a just-created task, as it was, to remove it if the sheet closes unchanged
-function openTaskSheet(id, { isNew = false } = {}) {
+function openTaskSheet(id, { isNew = false, comments = false } = {}) {
   sheetTaskId = id;
   sheetLinksFor = null;
   sheetAdding = null;
   sheetNew = isNew ? JSON.stringify(tasks.find(t => t.id === id)) : null;
+  window.collab?.openThread(id);
   drawSheet();
   if (!sheet.open) { sheet.showModal(); sheetOpenedAt = Date.now(); }
   sheet.scrollTop = 0;
   if (isNew) { const n = sheetBody.querySelector('.sheet-name'); n.focus(); n.select(); } // type the name straight away
   else sheetBody.focus({ preventScroll: true }); // just the information: nothing selected, no keyboard
+  if (comments) window.collab?.showThread(); // from a task's 💬: straight to its comments
 }
 sheet.addEventListener('close', () => {
   const t = tasks.find(x => x.id === sheetTaskId);
   if (sheetNew && t && JSON.stringify(t) === sheetNew) removeTask(t.id);
   sheetNew = null;
+  window.collab?.closeThread();
 });
 
 function sheetLinks(links, owner) {
   const adding = sheetAdding === `link:${owner}`;
   return `<ul class="sheet-links">${(links || []).map((l, i) => `<li>${CLIP_ICON}
       <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(l.url))}</a>
-      <button type="button" class="sheet-link-del" data-owner="${owner}" data-index="${i}" title="Remove link">✕</button></li>`).join('')}</ul>
-    ${adding ? `<form class="sheet-add-link" data-owner="${owner}">
+      ${readOnly ? '' : `<button type="button" class="sheet-link-del" data-owner="${owner}" data-index="${i}" title="Remove link">✕</button>`}</li>`).join('')}</ul>
+    ${readOnly ? (links || []).length ? '' : '<p class="sheet-none">None</p>' : adding ? `<form class="sheet-add-link" data-owner="${owner}">
         <input type="text" inputmode="url" autocomplete="off" placeholder="Paste a link (Google Doc, website…)">
         <button class="primary">Add</button>
       </form><div class="error"></div>`
@@ -882,6 +1141,7 @@ function drawSheet() {
   const c = t.group ? PALETTE[groupColors[t.group]] || UNGROUPED_COLOR : UNGROUPED_COLOR;
   const subs = t.subtasks || [], pct = progressOf(t);
   const ms = v => `<option value="${v}"${(t.milestone || '') === v ? ' selected' : ''}>${{ '': 'None', start: 'At start', end: 'At end' }[v]}</option>`;
+  if (readOnly) return drawSheetViewOnly(t, c, subs, pct);
   sheetBody.innerHTML = `
     <div class="sheet-head" style="--bar:${c.bg}">
       <input class="sheet-name" value="${esc(t.name)}" aria-label="Task name" autocomplete="off">
@@ -903,6 +1163,7 @@ function drawSheet() {
     <ul class="sheet-subs">${subs.map(s => `<li data-sub="${s.id}">
         <div class="sheet-sub-row">
           <input type="checkbox" class="sheet-sub-done" ${s.done ? 'checked' : ''} aria-label="Done">
+          <span class="sheet-sub-no" title="Subtask ${s.no}">${s.no}</span>
           <input class="sheet-sub-name${s.done ? ' sub-checked' : ''}" value="${esc(s.name)}" aria-label="Subtask name" autocomplete="off">
           <button type="button" class="sheet-sub-links${(s.links || []).length ? ' has-links' : ''}${sheetLinksFor === s.id ? ' open' : ''}" title="Links">${CLIP_ICON}${(s.links || []).length ? `<small>${s.links.length}</small>` : ''}</button>
           <button type="button" class="sheet-sub-del" title="Delete subtask">✕</button>
@@ -912,10 +1173,54 @@ function drawSheet() {
     ${sheetAdding === 'sub'
       ? `<form class="sheet-add-sub"><input autocomplete="off" placeholder="New subtask"><button class="primary">Add</button></form>`
       : `<button type="button" class="sheet-adder" data-add="sub">+ Add subtask</button>`}
+    <div class="sheet-thread-slot"></div>
     <div class="sheet-foot">
       <button type="button" class="sheet-delete">Delete task</button>
       <button type="button" class="primary sheet-close">Done</button>
     </div>`;
+  window.collab?.placeThread(sheetBody.querySelector('.sheet-thread-slot')); // the comments (kept across redraws)
+}
+
+// A done / not done mark that only shows (viewing someone else's project): a
+// small square like the subtask tick box, but not a box you can tick
+const subTick = (done, round) => `<span class="sub-tick${done ? ' on' : ''}${round ? ' round' : ''}" role="img" aria-label="${done ? 'Done' : 'Not done yet'}"
+  title="${done ? 'Done' : 'Not done yet'} (only the project's owner can change this)">${done ? '✓' : ''}</span>`;
+
+// The sheet when viewing someone else's project: the same information as plain
+// text (nothing that looks like it could be changed), a note saying so, and the comments
+function drawSheetViewOnly(t, c, subs, pct) {
+  const day = s => parse(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const field = (name, value, none) => `<div class="sheet-field"><span>${name}</span><b${none ? ' class="none"' : ''}>${value}</b></div>`;
+  sheetBody.innerHTML = `
+    <div class="sheet-head" style="--bar:${c.bg}">
+      <h2 class="sheet-title">${esc(t.name)}</h2>
+      <button type="button" class="sheet-close" title="Close">✕</button>
+    </div>
+    <p class="sheet-ro-note">${'<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>'}View only: you can read this task and write comments. Only the project's owner can change it.</p>
+    <div class="sheet-status" style="--bar:${c.bg}">${subs.length
+      ? `${subs.filter(s => s.done).length}/${subs.length} subtasks done · ${pct}%`
+      : `<span class="sheet-state">${subTick(t.done, true)} ${t.done ? 'Done' : 'Not done yet'}</span>`}</div>
+    <div class="sheet-grid sheet-fields">
+      ${field('Start', day(t.start))}
+      ${field('End', day(t.end))}
+      ${field('Group', t.group ? esc(t.group) : 'None', !t.group)}
+      ${field('Milestone', { start: 'At start', end: 'At end' }[t.milestone] || 'None', !t.milestone)}
+    </div>
+    <h3>Links</h3>
+    ${sheetLinks(t.links, 'task')}
+    <h3>Subtasks</h3>
+    ${subs.length ? `<ul class="sheet-subs" style="--bar:${c.bg}">${subs.map(s => `<li data-sub="${s.id}">
+        <div class="sheet-sub-row">
+          ${subTick(s.done)}
+          <span class="sheet-sub-no" title="Subtask ${s.no}">${s.no}</span>
+          <span class="sheet-sub-text${s.done ? ' sub-checked' : ''}">${esc(s.name)}</span>
+          ${(s.links || []).length ? `<button type="button" class="sheet-sub-links has-links${sheetLinksFor === s.id ? ' open' : ''}" title="Links">${CLIP_ICON}<small>${s.links.length}</small></button>` : ''}
+        </div>
+        ${sheetLinksFor === s.id ? `<div class="sheet-sub-linkbox">${sheetLinks(s.links, s.id)}</div>` : ''}
+      </li>`).join('')}</ul>` : '<p class="sheet-none">None</p>'}
+    <div class="sheet-thread-slot"></div>
+    <div class="sheet-foot"><span></span><button type="button" class="primary sheet-close">Close</button></div>`;
+  window.collab?.placeThread(sheetBody.querySelector('.sheet-thread-slot'));
 }
 
 const sheetTask = () => tasks.find(x => x.id === sheetTaskId);
@@ -947,6 +1252,7 @@ sheetBody.addEventListener('click', async e => {
 });
 
 sheetBody.addEventListener('change', e => {
+  if (readOnly || e.target.closest('.thread')) return;
   const t = sheetTask(), el = e.target, li = el.closest('.sheet-subs li');
   if (el.matches('.sheet-name')) { t.name = el.value.trim() || t.name; return sheetCommit(); }
   if (el.matches('.sheet-done')) { t.done = el.checked; return sheetCommit(); }
@@ -959,13 +1265,14 @@ sheetBody.addEventListener('change', e => {
     if (!start || !end || end < start) { sheetBody.querySelector('.sheet-date-error').textContent = 'The end date must be on or after the start date.'; return; }
     const before = { ...t };
     Object.assign(t, { start, end });
-    sheetCommit();
-    offerToShiftFollowing(before, t).then(drawSheet);
+    render(); drawSheet();
+    offerToShiftFollowing(before, t, undefined, () => Object.assign(t, { start: before.start, end: before.end })).then(drawSheet);
   }
 });
 
 sheetBody.addEventListener('submit', e => {
   e.preventDefault();
+  if (readOnly) return;
   const f = e.target, input = f.querySelector('input'), t = sheetTask();
   if (f.matches('.sheet-add-sub')) {
     const name = input.value.trim();
@@ -988,7 +1295,7 @@ sheet.addEventListener('click', e => { if (e.target === sheet && Date.now() - sh
 // When the app opens (and again after midnight if it stays open), a notice
 // lists the unfinished tasks that start today and later this week (weeks run
 // Monday to Sunday). OK hides it until the next day.
-const NOTICE_KEY = 'simple-gantt-notice-seen'; // the day the notice was last closed
+const NOTICE_KEY = perProject('simple-gantt-notice-seen'); // the day the notice was last closed
 function checkComingUp() {
   const today = todayString();
   let seen = null;
@@ -1027,7 +1334,7 @@ function buildCalendar() {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');   // 20261004T101500Z
   // "Google Doc: https://…" for Google links; other links are just their address
   const linkLine = url => linkLabel(url).startsWith('Google ') ? `${linkLabel(url)}: ${url}` : url;
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Simple Gantt//EN', 'CALSCALE:GREGORIAN',
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//WorkNest//EN', 'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH', `X-WR-CALNAME:${text(projectName)}`];
   const event = (uid, start, endIncl, summary, description, group, attach = []) => lines.push(
     'BEGIN:VEVENT', `UID:${uid}@simple-gantt`, `DTSTAMP:${stamp}`,
@@ -1087,7 +1394,7 @@ document.getElementById('calendarBtn').onclick = () => {
 
 document.getElementById('exportBtn').onclick = () => {
   syncGroupColors();
-  const blob = new Blob([JSON.stringify({ name: projectName, tasks, groupColors }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ name: projectName, color: projectColor || undefined, tasks, groupColors }, null, 2)], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${fileSlug()}.json` });
   a.click(); URL.revokeObjectURL(a.href);
 };
@@ -1098,6 +1405,7 @@ document.getElementById('importFile').onchange = async e => {
     let data = JSON.parse(await file.text());
     // Accepts { name, tasks, groupColors } or an older plain array of tasks
     groupColors = (!Array.isArray(data) && data.groupColors) || {};
+    if (!Array.isArray(data) && typeof data.color === 'string' && HEX.test(data.color)) { projectColor = normHex(data.color); drawProjectColor(); }
     if (!Array.isArray(data) && data.name) setProjectName(String(data.name));
     if (!Array.isArray(data)) data = data.tasks;
     if (!Array.isArray(data)) throw 0;
@@ -1127,7 +1435,7 @@ const PALETTE = [
 const UNGROUPED_COLOR = { bg: '#6E6E78', fg: '#fff' };
 
 // ---- Collapsed groups (persisted) ----
-const COLLAPSED_KEY = 'simple-gantt-collapsed';
+const COLLAPSED_KEY = perProject('simple-gantt-collapsed');
 let collapsed = new Set((() => {
   try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY)) || []; } catch { return []; }
 })());
@@ -1139,12 +1447,13 @@ function toggleGroup(g) {
   collapsed.has(g) ? collapsed.delete(g) : collapsed.add(g);
   saveCollapsed(); render();
 }
-document.getElementById('collapseAllBtn').onclick = () => {
-  const groups = [...new Set(tasks.map(t => t.group || ''))];
-  const allCollapsed = groups.every(g => collapsed.has(g));
-  collapsed = new Set(allCollapsed ? [] : groups);
+// Collapse / expand all groups (the bar with a chevron above the task list, when there are groups)
+chartEl.addEventListener('click', e => {
+  const b = e.target.closest('[data-fold]');
+  if (!b) return;
+  collapsed = new Set(b.dataset.fold === 'collapse' ? tasks.map(t => t.group || '') : []);
   saveCollapsed(); render();
-};
+});
 chartEl.addEventListener('click', e => {
   const btn = e.target.closest('.toggle');
   if (btn) toggleGroup(btn.dataset.toggle);
@@ -1160,7 +1469,7 @@ function progressOf(t) {
 }
 
 // Tasks whose subtask list is open in the list (persisted)
-const EXPANDED_KEY = 'simple-gantt-expanded';
+const EXPANDED_KEY = perProject('simple-gantt-expanded');
 let expanded = new Set((() => {
   try { return JSON.parse(localStorage.getItem(EXPANDED_KEY)) || []; } catch { return []; }
 })());
@@ -1175,8 +1484,8 @@ const subtaskOf = el => {
 
 async function removeLinkAsk(fromId, toId) {
   const from = tasks.find(t => t.id === fromId), to = tasks.find(t => t.id === toId);
-  const ok = await askConfirm('Remove link?',
-    `<b>${esc(to.name)}</b> will no longer have to wait for <b>${esc(from.name)}</b> to finish.`, 'Remove link');
+  const ok = await askConfirm('Remove the dependency?',
+    `<b>${esc(to.name)}</b> will no longer be a successor of <b>${esc(from.name)}</b>, so it won't have to wait for it to finish.`, 'Remove dependency');
   if (!ok) return;
   to.after = to.after.filter(id => id !== fromId);
   save(); render();
@@ -1211,6 +1520,15 @@ function finishAddingSubtask(input, { keep, next }) {
 chartEl.addEventListener('click', e => {
   const clip = e.target.closest('.link-btn');
   if (clip) return openLinks({ task: clip.dataset.task, sub: clip.dataset.sub }, clip);
+  const talk = e.target.closest('.cm-badge'); // a task's 💬: its comments
+  if (talk) return openTaskSheet(talk.dataset.task, { comments: true });
+  if (readOnly) { // viewing: open a task by clicking it; rings still show its subtasks
+    const ring = e.target.closest('button.status.ring');
+    if (ring) { expanded.has(ring.dataset.task) ? expanded.delete(ring.dataset.task) : expanded.add(ring.dataset.task); saveExpanded(); return render(); }
+    const item = !e.target.closest('button') && e.target.closest('.bar, .labels .task-row');
+    if (item) openTaskSheet(item.dataset.id);
+    return;
+  }
   const add = e.target.closest('.sub-add-btn');
   if (add) return startAddingSubtask(add.dataset.task);
   const link = e.target.closest('g.link');
@@ -1239,6 +1557,7 @@ chartEl.addEventListener('click', e => {
 
 chartEl.addEventListener('change', e => {
   if (!e.target.matches('.sub-done')) return;
+  if (readOnly) return render(); // (put the tick back)
   subtaskOf(e.target).sub.done = e.target.checked;
   save(); render();
 });
@@ -1323,7 +1642,7 @@ function openLinks(key, anchor) {
   const r = anchor.getBoundingClientRect(), w = linkPanel.offsetWidth, h = linkPanel.offsetHeight;
   linkPanel.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
   linkPanel.style.top = (r.bottom + 6 + h > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
-  document.getElementById('linkInput').focus();
+  if (!readOnly) document.getElementById('linkInput').focus();
 }
 function closeLinks() { linkPanel.hidden = true; linkOwner = null; }
 
@@ -1339,6 +1658,7 @@ function drawLinkPanel() {
 
 document.getElementById('linkForm').addEventListener('submit', e => {
   e.preventDefault();
+  if (readOnly) return;
   const input = document.getElementById('linkInput');
   const url = normalizeUrl(input.value);
   if (!url) { document.getElementById('linkError').textContent = 'That doesn\'t look like a web link.'; return; }
@@ -1349,7 +1669,7 @@ document.getElementById('linkForm').addEventListener('submit', e => {
 });
 document.getElementById('linkList').addEventListener('click', e => {
   const btn = e.target.closest('.link-remove');
-  if (!btn) return;
+  if (!btn || readOnly) return;
   ownerOf(linkOwner).links.splice(+btn.dataset.index, 1);
   save(); render(); drawLinkPanel();
 });
@@ -1456,7 +1776,7 @@ chartEl.addEventListener('dblclick', () => {
 // ---- Group order (persisted) ----
 // Groups are shown by their earliest start date. Groups that start on the same
 // day keep the order they had before, so this remembers the last order shown.
-const GROUP_ORDER_KEY = 'simple-gantt-group-order';
+const GROUP_ORDER_KEY = perProject('simple-gantt-group-order');
 let groupOrder = (() => {
   try { return JSON.parse(localStorage.getItem(GROUP_ORDER_KEY)) || []; } catch { return []; }
 })();
@@ -1483,7 +1803,65 @@ const labelsW = () => {
   const w = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--labels-w'));
   return Number.isNaN(w) ? 220 : w; // 0 is a real width (the list hidden on a phone)
 };
+const EDGE_NAV = 26;  // width of ‹ and › at the ends of the date header (matches .edge-nav in styles.css)
 const HEAD_H = 77;    // height of the date header incl. its border (matches .head in styles.css)
+
+// ---- The task list's width: drag its right edge ----
+// Dragging the edge makes the list wider or narrower; dragging it almost shut
+// folds it into a thin strip (the rows' colours still show), and dragging the
+// strip out (or clicking it) opens it again. Double-click the edge to fold or
+// open it. Remembered on this computer; not on phones (no list there).
+const LIST_W_KEY = (TEST_MODE ? 'worknest-test:' : '') + 'simple-gantt-list-width';
+const LIST_MIN = 120, LIST_FOLDED = 16, LIST_DEFAULT = 220;
+let listW = LIST_DEFAULT, listFolded = false;
+try {
+  const saved = JSON.parse(localStorage.getItem(LIST_W_KEY));
+  if (saved && saved.w >= LIST_MIN) listW = saved.w;
+  if (saved) listFolded = !!saved.folded;
+} catch {}
+const listMax = () => Math.max(LIST_MIN, Math.min(640, (chartEl.clientWidth || 2000) - 160)); // (0 while the page is still hidden)
+function applyListWidth() {
+  const root = document.documentElement;
+  if (phoneQuery.matches) { root.style.removeProperty('--labels-w'); root.classList.remove('list-folded'); return; }
+  root.style.setProperty('--labels-w', (listFolded ? LIST_FOLDED : Math.min(listW, listMax())) + 'px');
+  root.classList.toggle('list-folded', listFolded);
+}
+function saveListWidth() {
+  try { localStorage.setItem(LIST_W_KEY, JSON.stringify({ w: listW, folded: listFolded })); } catch {}
+}
+function setListFolded(folded) {
+  listFolded = folded;
+  applyListWidth(); saveListWidth(); render();
+}
+applyListWidth();
+chartEl.addEventListener('pointerdown', e => {
+  if (!e.target.closest('.list-grip') || e.button !== 0) return;
+  e.preventDefault();
+  const startX = e.clientX, startW = labelsW(), wasW = listW;
+  let moved = false;
+  document.documentElement.classList.add('list-resizing');
+  const move = ev => {
+    if (!moved && Math.abs(ev.clientX - startX) < 3) return;
+    moved = true;
+    const w = startW + ev.clientX - startX;
+    listFolded = w < LIST_MIN * 0.6; // (dragged well past the narrowest: fold)
+    if (!listFolded) listW = Math.max(LIST_MIN, Math.min(listMax(), w));
+    applyListWidth();
+    tidyHeaderLabels();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    document.documentElement.classList.remove('list-resizing');
+    if (moved) { if (listFolded) listW = wasW; saveListWidth(); render(); } // (folded: it opens again at the width it had)
+    else if (listFolded) setListFolded(false); // (a click on the folded strip opens it)
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+});
+chartEl.addEventListener('dblclick', e => { if (e.target.closest('.list-grip') && !listFolded) setListFolded(true); });
 const timelineEl = () => chartEl.querySelector('.timeline');
 const dayNumber = d => Math.round(d / DAY);
 const dayString = n => fmt(new Date(n * DAY));
@@ -1630,7 +2008,7 @@ chartEl.addEventListener('pointerdown', e => {
       if (e.target.closest('.name')) return; // first tap on a name only selects the row
     }
   }
-  if (e.button !== 0 || e.target.closest('button, input, .renaming')) return;
+  if (readOnly || e.button !== 0 || e.target.closest('button, input, .renaming')) return; // (viewing: clicks only)
   const name = e.target.closest('.labels .name');
   if (name) {
     e.preventDefault(); // keep focus where it is; we switch the editing over ourselves
@@ -1695,8 +2073,8 @@ chartEl.addEventListener('pointerup', () => {
     if (start === d.task.start && end === d.task.end && regroupTo === null) return render();
     const before = { ...d.task };
     Object.assign(d.task, { start, end }, regroupTo !== null ? { group: regroupTo } : {});
-    save(); render();
-    offerToShiftFollowing(before, d.task);
+    render();
+    offerToShiftFollowing(before, d.task, undefined, () => Object.assign(d.task, { start: before.start, end: before.end, group: before.group }));
   } else if (d.kind === 'group') {
     if (!d.days) return render();
     const members = tasks.filter(t => (t.group || '') === d.group);
@@ -1706,10 +2084,11 @@ chartEl.addEventListener('pointerup', () => {
     };
     const shift = s => fmt(new Date(+parse(s) + d.days * DAY));
     members.forEach(t => { t.start = shift(t.start); t.end = shift(t.end); });
-    save(); render();
+    render();
     // Offer to move the tasks in other groups that come after this group
+    const back = s => fmt(new Date(+parse(s) - d.days * DAY));
     offerToShiftFollowing(before, { name: groupLabel(d.group), group: d.group, end: shift(before.end), isGroup: true },
-      new Set(members.map(t => t.id)));
+      new Set(members.map(t => t.id)), () => members.forEach(t => { t.start = back(t.start); t.end = back(t.end); }));
   } else if (d.kind === 'create') {
     render(); // removes the outline of the new task
     createTaskFromDrag(d);
@@ -1783,6 +2162,7 @@ const shortDate = s => parse(s).toLocaleDateString(undefined, { month: 'short', 
 
 // ---- Render ----
 function render() {
+  numberSubtasks();
   const dayW = exportOpts ? exportOpts.dayW : zoom;
   // Tasks are always listed by start date (ties keep the order they were added)
   const sorted = [...tasks].sort((a, b) => a.start.localeCompare(b.start));
@@ -1812,24 +2192,22 @@ function render() {
 
   const overviewBtn = document.getElementById('overviewBtn');
   overviewBtn.classList.toggle('active', !!overviewReturn);
-  overviewBtn.setAttribute('aria-checked', !!overviewReturn);
-  for (const b of document.querySelectorAll('#viewMenu [data-view]')) {
-    b.classList.toggle('active', b.dataset.view === view);
-    b.setAttribute('aria-checked', b.dataset.view === view);
-  }
-  const viewName = { day: 'Day', week: 'Week', month: 'Month', quarter: 'Quarter' }[view];
-  document.getElementById('viewMenuBtn').textContent = `${viewName || (overviewReturn ? 'Overview' : 'Custom')} ▾`;
+  overviewBtn.setAttribute('aria-pressed', !!overviewReturn);
   const unit = { day: 'day', week: 'week', month: 'month', quarter: 'quarter' }[view] || 'screen';
   document.getElementById('prevBtn').title = `Previous ${unit}`;
   document.getElementById('nextBtn').title = `Next ${unit}`;
+  // (› sits just left of the chart's scroll bar, if it has one)
+  chartEl.parentElement.style.setProperty('--sbw', `${chartEl.offsetWidth - chartEl.clientWidth}px`);
 
   // Header rows, top to bottom: quarter, month + year, ISO week, day number.
   // Quarter, month and week labels sit in a block as wide as their period and
   // stick to the left edge while you scroll, until the next one pushes them away.
   let grid = '', head = '';
+  // (each label can be clicked to show just that period: data-view / data-date)
+  const isShown = (cls, from) => view === cls && viewRange && viewRange.start === fmt(dateAt(from));
   const period = (cls, from, to, text, minPx, title = '') => {
-    const w = (to - from) * dayW;
-    head += `<div class="hspan ${cls}" style="left:${from * dayW}px;width:${w}px"${title ? ` title="${title}"` : ''}>` +
+    const w = (to - from) * dayW, plain = title || text.replace(/<[^>]+>/g, '');
+    head += `<div class="hspan ${cls}${isShown(cls, from) ? ' shown' : ''}" data-view="${cls}" data-date="${fmt(dateAt(from))}" style="left:${from * dayW}px;width:${w}px" title="Show ${plain}">` +
       `<span>${w >= minPx ? text : ''}</span></div>`; // too narrow (a sliver at the chart's edge): no text
   };
   const dateAt = i => new Date(+min + i * DAY);
@@ -1843,7 +2221,7 @@ function render() {
       grid += `<div class="day${cls}" style="left:${i * dayW}px;width:${dayW}px"></div>`;
       if (dayW >= 18) {
         const label = dayW >= 70 ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }) : d.getUTCDate();
-        head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}" style="left:${i * dayW}px;width:${dayW}px">${label}</div>`;
+        head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}${view === 'day' && viewRange?.start === fmt(d) ? ' shown' : ''}" data-view="day" data-date="${fmt(d)}" title="Show ${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}" style="left:${i * dayW}px;width:${dayW}px">${label}</div>`;
       }
     }
     if (i === 0) continue;
@@ -1853,7 +2231,7 @@ function render() {
       monthFrom = i;
     }
     if (last || (d.getUTCDate() === 1 && d.getUTCMonth() % 3 === 0)) { // a quarter ends here (Jan, Apr, Jul, Oct)
-      period('quarter', quarterFrom, i, `Q${Math.floor(dateAt(quarterFrom).getUTCMonth() / 3) + 1}`, 24);
+      period('quarter', quarterFrom, i, `Q${Math.floor(dateAt(quarterFrom).getUTCMonth() / 3) + 1}`, 24, `Q${Math.floor(dateAt(quarterFrom).getUTCMonth() / 3) + 1} ${dateAt(quarterFrom).getUTCFullYear()}`);
       quarterFrom = i;
     }
     if (last || d.getUTCDay() === 1) { // a week ends here (weeks run Monday to Sunday)
@@ -1895,9 +2273,13 @@ function render() {
   syncGroupColors();
   const groupColor = new Map(Object.entries(groupColors).map(([g, i]) => [g, PALETTE[i]]));
 
-  const collapseAllBtn = document.getElementById('collapseAllBtn');
-  collapseAllBtn.hidden = !showHeaders;
-  collapseAllBtn.textContent = order.every(g => collapsed.has(g)) ? 'Expand all' : 'Collapse all';
+  // Collapse all / Expand all: above the task list, when there are groups
+  // The list's heading, "∨ Tasks": with groups, its chevron (right above theirs)
+  // collapses every group, and turns to › to expand them again
+  const allShut = order.every(g => collapsed.has(g));
+  const collapseAll = showHeaders ? `<button type="button" class="fold-all${allShut ? ' shut' : ''}" data-fold="${allShut ? 'expand' : 'collapse'}"
+    title="${allShut ? 'Expand' : 'Collapse'} all groups" aria-expanded="${!allShut}"><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Tasks</span></button>`
+    : '<span class="list-title">Tasks</span>';
 
   let labels = '', rows = '';
   for (const g of order) {
@@ -1917,7 +2299,8 @@ function render() {
         return `<i class="group-ms" data-group="${esc(g)}" style="left:${day * dayW}px" title="${esc(t.name)} (milestone)"></i>`;
       }).join('');
       labels += `<div class="row group-row ghead" ${rowGroup} style="${colorVars}">
-          <button class="toggle" data-toggle="${esc(g)}" title="${isCollapsed ? 'Expand' : 'Collapse'} group">${isCollapsed ? '▸' : '▾'}</button>
+          <button class="toggle${isCollapsed ? ' shut' : ''}" data-toggle="${esc(g)}" title="${isCollapsed ? 'Expand' : 'Collapse'} group" aria-expanded="${!isCollapsed}"><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <i class="group-dot" aria-hidden="true"></i>
           <span${g ? ` class="name" data-rename-group="${esc(g)}" title="Click to rename the group"` : ''}>${esc(groupLabel(g))}</span>
           ${isCollapsed ? `<small class="count">${list.length} task${list.length > 1 ? 's' : ''}</small>` : ''}
         </div>`;
@@ -1943,27 +2326,30 @@ function render() {
 
       labels += `
         <div class="row task-row${grouped}${done}${isSelected(t.id) ? ' selected' : ''}" data-id="${t.id}" ${rowGroup} style="${colorVars}"
-             title="Click the name to rename, double-click the row to edit dates and more${showHeaders ? ', drag onto another group to move it there' : ''}">
+             title="${readOnly ? 'Click to see the task and its comments' : `Click the name to rename, double-click the row to edit dates and more${showHeaders ? ', drag onto another group to move it there' : ''}`}">
           ${subs.length
             // With subtasks: a thick two-tone ring that fills up with the progress.
             // Clicking it opens/closes the subtask list.
             ? `<button class="status ring" data-task="${t.id}" style="--pct:${pct}" aria-expanded="${open}"
                        title="${doneSubs}/${subs.length} subtasks done (${pct}%). Click to ${open ? 'hide' : 'show'} subtasks"></button>`
             // Without subtasks: a thin circle you click to mark the task done
+            // (viewing: the same circle, but only showing it; it isn't a button)
+            : readOnly ? `<span class="status${t.done ? ' checked' : ''}" role="img" aria-label="${t.done ? 'Done' : 'Not done yet'}"
+                       title="${t.done ? 'Done' : 'Not done yet'} (only the project's owner can change this)">${t.done ? '✓' : ''}</span>`
             : `<button class="status${t.done ? ' checked' : ''}" data-task="${t.id}" aria-pressed="${!!t.done}"
                        title="${t.done ? 'Done. Click to mark as not done' : 'Click to mark as done'}">${t.done ? '✓' : ''}</button>`}
           ${t.milestone ? `<i class="ms-icon" title="Milestone at ${t.milestone}"></i>` : ''}
-          <span class="name">${esc(t.name)}</span>
-          ${subs.length ? `<small class="sub-count" title="Subtasks done">${doneSubs}/${subs.length}</small>` : ''}
+          <span class="name-wrap"><span class="name">${esc(t.name)}</span>${subs.length ? `<small class="sub-count" title="Subtasks done">(${doneSubs}/${subs.length})</small>` : ''}</span>
           ${linkButton(t.links, t.id)}
           <button class="sub-add-btn reveal" data-task="${t.id}" title="Add subtask">+</button>
           <button class="reveal" onclick="removeTask('${t.id}')" title="Delete">✕</button>
+          ${window.collab?.badge(t.id) || ''}
         </div>`;
 
       rows += `<div class="row${grouped}" ${rowGroup} style="position:relative;height:${rowH}px;${colorVars}">
         <div class="bar${t.milestone ? ' ms-' + t.milestone : ''}${done}${open ? ' tall' : ''}" data-id="${t.id}" data-group="${esc(g)}" style="left:${left}px;width:${len * dayW}px;top:7px;height:${rowH - 14}px"
-             title="${esc(t.name)}: ${t.start} → ${t.end} (${len} day${len > 1 ? 's' : ''})${subs.length ? ` · ${pct}% done` : ''}${t.milestone ? `\nMilestone at ${t.milestone}` : ''}\nDouble-click to edit dates and more\nDrag to move (up/down to change group), drag edges to resize"
-          ><span class="progress" style="width:${pct}%"></span><span class="handle" data-edge="start"></span><span class="label">${esc(t.name)}${subs.length ? ` · ${pct}%` : ''}</span><span class="handle" data-edge="end"></span>${t.milestone ? '<i class="diamond"></i>' : ''}<span class="link-dot" title="Drag onto another task: it can only start after this one has finished"></span></div>
+             title="${esc(t.name)}: ${t.start} → ${t.end} (${len} day${len > 1 ? 's' : ''})${subs.length ? ` · ${pct}% done` : ''}${t.milestone ? `\nMilestone at ${t.milestone}` : ''}${readOnly ? '\nClick to see the task and its comments' : '\nDouble-click to edit dates and more\nDrag to move (up/down to change group), drag edges to resize'}"
+          ><span class="progress" style="width:${pct}%"></span><span class="handle" data-edge="start"></span><span class="label">${esc(t.name)}${subs.length ? ` · ${pct}%` : ''}</span><span class="handle" data-edge="end"></span>${t.milestone ? '<i class="diamond"></i>' : ''}<span class="link-dot" title="Drag onto another task to make it a successor of this one (it can only start after this one finishes)"></span></div>
       </div>`;
 
       // The subtask checklist in the list, one row per subtask (plus the line
@@ -1971,8 +2357,9 @@ function render() {
       if (open) {
         for (const s of subs) {
           labels += `<div class="row sub-row${grouped}${isSelected(t.id, s.id) ? ' selected' : ''}" data-task="${t.id}" data-sub="${s.id}" ${rowGroup} style="${colorVars}">
-            <input type="checkbox" class="sub-done" data-task="${t.id}" data-sub="${s.id}" ${s.done ? 'checked' : ''}>
-            <span class="name${s.done ? ' sub-checked' : ''}" data-task="${t.id}" data-sub="${s.id}" title="Click to rename">${esc(s.name)}</span>
+            ${readOnly ? subTick(s.done) : `<input type="checkbox" class="sub-done" data-task="${t.id}" data-sub="${s.id}" ${s.done ? 'checked' : ''}>`}
+            <small class="sub-no" title="Subtask ${s.no} (refer to it in comments by its number)">${s.no}</small>
+            <span class="name${s.done ? ' sub-checked' : ''}" data-task="${t.id}" data-sub="${s.id}"${readOnly ? '' : ' title="Click to rename"'}>${esc(s.name)}</span>
             ${linkButton(s.links, t.id, s.id)}
             <button class="sub-remove reveal" data-task="${t.id}" data-sub="${s.id}" title="Delete subtask">✕</button>
           </div>`;
@@ -1992,12 +2379,9 @@ function render() {
   labels += `<div class="row add-row"><span>${tasks.length ? 'Drag on the chart to add a task' : 'Drag on the chart to add your first task'}</span></div>`;
   rows += `<div class="row add-row" style="position:relative"></div>`;
 
-  // Lift ‹ [Week ▾] › out of the corner first, so redrawing never throws them away
-  const viewFocus = viewBtns.contains(document.activeElement) && document.activeElement;
-  if (chartEl.contains(viewBtns)) document.getElementById('todayBtn').after(viewBtns);
   chartEl.innerHTML = `
     <div class="chart">
-      <div class="labels"><div class="head"></div>${labels}</div>
+      <div class="labels"><div class="head">${collapseAll}</div>${labels}<div class="list-grip" title="${listFolded ? 'Click or drag to show the task list' : 'Drag to make the list wider or narrower (double-click to fold it away)'}"></div></div>
       <div class="timeline">
         <div class="track${compact ? ' compact' : ''}" style="width:${width}px">
           ${grid}${today}
@@ -2015,27 +2399,47 @@ function render() {
   applyDragVisual(); // re-apply an in-progress drag to the fresh elements
   if (!drag || !drag.moved) drawLinks();
   tidyHeaderLabels();
-  if (!exportOpts) placeViewBtns(viewFocus); // (not in the copy made for the image)
   if (sheet.open && !sheetBody.contains(document.activeElement)) drawSheet(); // keep an open task sheet up to date
-}
-
-// ‹ [Week ▾] › sit in the empty corner above the task list on a computer, and
-// in the toolbar after Today on a phone (where that corner isn't shown)
-const viewBtns = document.getElementById('viewBtns');
-function placeViewBtns(focused) {
-  const corner = !phoneQuery.matches && chartEl.querySelector('.labels > .head');
-  if (corner) { if (viewBtns.parentElement !== corner) corner.appendChild(viewBtns); }
-  else if (viewBtns.previousElementSibling?.id !== 'todayBtn') document.getElementById('todayBtn').after(viewBtns);
-  if (focused && document.activeElement !== focused) focused.focus({ preventScroll: true }); // keep the keyboard where it was
 }
 
 // A quarter/month/week label that is being pushed out of view (its period is
 // scrolling away behind the task list) is hidden rather than shown cut off.
 function tidyHeaderLabels() {
-  const visibleLeft = chartEl.getBoundingClientRect().left + labelsW();
+  const visibleLeft = chartEl.getBoundingClientRect().left + labelsW() + EDGE_NAV;
   for (const span of chartEl.querySelectorAll('.hspan')) {
     const label = span.firstElementChild, r = span.getBoundingClientRect();
     label.style.visibility = r.right - Math.max(r.left, visibleLeft) < label.offsetWidth ? 'hidden' : '';
+  }
+  pinFirstLabels(visibleLeft);
+}
+// The first quarter / month / week in view is often only partly in view (a month
+// rarely starts on a Monday), so its label doesn't fit in it and is hidden. It's
+// shown anyway, at the left edge, so the three rows all start at the same point:
+// shortened if needed ("Week 13" → "W13" → "13", "Apr 2026" → "Apr") to end
+// before the next label. Clicking it shows that period, like the others.
+function pinFirstLabels(visibleLeft) {
+  const head = chartEl.querySelector('.track > .head');
+  head?.querySelectorAll('.head-pin').forEach(el => el.remove());
+  if (!head || exportOpts) return;
+  const trackLeft = head.parentElement.getBoundingClientRect().left;
+  for (const cls of ['quarter', 'month', 'week']) {
+    const spans = [...head.querySelectorAll(`.hspan.${cls}`)];
+    const k = spans.findIndex(sp => { const r = sp.getBoundingClientRect(); return r.left < visibleLeft - 1 && r.right > visibleLeft + 1; }); // (±1px: not a period that just touches the edge)
+    if (k < 0 || spans[k].firstElementChild.style.visibility !== 'hidden') continue;
+    const first = spans[k], next = spans[k + 1];
+    const room = (next ? next.getBoundingClientRect().left + 4 : Infinity) - visibleLeft - 6;
+    const full = first.title.replace(/^Show /, '');
+    const n = full.match(/\d+$/)?.[0] || '';
+    const texts = cls === 'week' ? [`Week ${n}`, `W${n}`, n] : cls === 'month' ? [full, full.split(' ')[0]] : [full.split(' ')[0]];
+    const pin = document.createElement('div');
+    pin.className = `hspan ${cls} head-pin${first.classList.contains('shown') ? ' shown' : ''}`;
+    Object.assign(pin.dataset, { view: first.dataset.view, date: first.dataset.date });
+    pin.title = first.title;
+    pin.style.left = `${visibleLeft - trackLeft}px`;
+    const inner = document.createElement('span');
+    pin.append(inner);
+    head.append(pin);
+    for (const t of texts) { inner.textContent = t; if (inner.offsetWidth <= room) break; }
   }
 }
 let tidyQueued = false;
@@ -2065,7 +2469,7 @@ function drawLinks() {
     const bar = chartEl.querySelector(`.bar[data-id="${id}"]`);
     if (!bar) return null; // hidden in a collapsed group
     const r = bar.getBoundingClientRect();
-    return { left: r.left - tr.left, right: r.right - tr.left, y: r.top - tr.top + 11 }; // y: the bar's first line
+    return { left: r.left - tr.left, right: r.right - tr.left, top: r.top - tr.top, bottom: r.bottom - tr.top, y: r.top - tr.top + 11 }; // y: the bar's first line
   };
   let out = '';
   for (const t of tasks) {
@@ -2074,15 +2478,24 @@ function drawLinks() {
       if (!a || !b || !pred) continue;
       const conflict = b.left < a.right - 1;
       const x1 = a.right, y1 = a.y, x2 = b.left, y2 = b.y;
-      // Straight across and down when there's room; otherwise loop round between the rows
-      const d = x2 - x1 >= 16
-        ? `M${x1} ${y1} H${x1 + 8} V${y2} H${x2}`
-        : `M${x1} ${y1} H${x1 + 8} V${y2 + (y2 > y1 ? -ROW_H / 2 : ROW_H / 2)} H${x2 - 8} V${y2} H${x2}`;
+      // Straight across and down into its start when there's room. A red one (it
+      // starts before the first one has finished) loops back round between the rows
+      // into its start, so the clash shows. Otherwise (it starts right after, with
+      // no room) the arrow doesn't go back: it runs on a little from the first one's
+      // end, then straight down (or up) onto the next bar.
+      const room = x2 - x1 >= 16;
+      const xm = Math.min(Math.max(x1 + 8, x2 + 8), Math.max(x1 + 8, b.right - 6)); // (on the bar where possible)
+      const down = y2 > y1, edge = down ? b.top : b.bottom;
+      const d = room ? `M${x1} ${y1} H${x1 + 8} V${y2} H${x2}`
+        : conflict ? `M${x1} ${y1} H${x1 + 8} V${y2 + (down ? -ROW_H / 2 : ROW_H / 2)} H${x2 - 8} V${y2} H${x2}`
+        : `M${x1} ${y1} H${xm} V${edge}`;
+      const head = room || conflict ? `M${x2} ${y2} l-6 -4 v8 z` : `M${xm} ${edge} l-4 ${down ? -6 : 6} h8 z`;
       out += `<g class="link${conflict ? ' conflict' : ''}" data-from="${pid}" data-to="${t.id}">
-        <title>${esc(pred.name)} → ${esc(t.name)}${conflict ? ' (starts before it has finished)' : ''}. Click to remove</title>
+        <title>${conflict ? `Dependency conflict: “${esc(t.name)}” starts before its predecessor “${esc(pred.name)}” finishes.`
+          : `“${esc(t.name)}” is a successor of “${esc(pred.name)}”: it can only start after “${esc(pred.name)}” finishes.`}${readOnly ? '' : '\nClick to remove the dependency'}</title>
         <path class="hit" d="${d}" fill="none" stroke="transparent" stroke-width="10"/>
         <path class="line" d="${d}" fill="none" stroke="${conflict ? '#d94a3b' : '#6e6e73'}" stroke-width="1.5"/>
-        <path class="head" d="M${x2} ${y2} l-6 -4 v8 z" fill="${conflict ? '#d94a3b' : '#6e6e73'}"/></g>`;
+        <path class="head" d="${head}" fill="${conflict ? '#d94a3b' : '#6e6e73'}"/></g>`;
       // (the attributes are a fallback for the saved image; on screen styles.css decides the look)
     }
   }
@@ -2116,10 +2529,12 @@ if (tasks === null) {
   const byName = n => tasks.find(t => t.name === n);
   byName('Build').after = [byName('Design').id];
   byName('Launch').after = [byName('Build').id];
-  save();
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {}
 }
 applyPhoneLayout(); // phone or computer layout first, so the chart is positioned in the right one
 render();
+// A project kept in this browser is loaded now (an online one when it arrives, collab.js)
+if (!CLOUD || localProject) { markSaved(true); restoreDraft(); } else drawSaveState();
 // Open on the remembered Day / Week / Month / Quarter for today, or scroll to today
 (() => {
   let v = null;
