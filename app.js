@@ -76,7 +76,20 @@ nameEl.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
   if (e.key === 'Escape') { nameEl.textContent = projectName; nameEl.blur(); }
 });
-nameEl.addEventListener('blur', () => setProjectName(nameEl.textContent));
+nameEl.addEventListener('blur', () => {
+  setProjectName(nameEl.textContent);
+  if (CLOUD) nameEl.contentEditable = 'false'; // (back to a plain chip)
+});
+// With Firebase, the name is the edit chip's text: "Rename…" in the chip's menu
+// makes it editable (Enter saves, Esc cancels). Without, click it to rename.
+nameEl.contentEditable = CLOUD ? 'false' : 'plaintext-only';
+if (!CLOUD) nameEl.title = 'Click to rename the project';
+function startProjectRename() {
+  if (readOnly) return;
+  nameEl.contentEditable = 'plaintext-only';
+  nameEl.focus();
+  getSelection().selectAllChildren(nameEl);
+}
 showProjectName();
 
 // ---- The project's colour on All projects: the dot after its name ----
@@ -94,6 +107,7 @@ function drawProjectColor() {
   const label = window.collab?.labelColor?.() || '';
   const shown = projectColor || label || NO_COLOR;
   colorBtn.style.setProperty('--dot', shown);
+  document.querySelector('.edit-chip')?.style.setProperty('--label', shown); // (the edit chip, in the same colour)
   colorBtn.classList.toggle('unset', !projectColor);
   colorBtn.title = readOnly ? "This project's colour on All projects (its owner chooses it)"
     : `This project's colour on All projects${projectColor ? '' : label ? " (its label's colour)" : ' (none chosen yet)'}. Click to change it`;
@@ -108,7 +122,7 @@ function setProjectColor(c) {
   if (readOnly || c === projectColor) return;
   projectColor = c;
   drawProjectColor();
-  save();
+  save(); // (a change like any other: saved with Save)
 }
 function showColorPop(open) {
   if (open && readOnly) return;
@@ -247,7 +261,8 @@ async function saveProject() {
     } catch { ok = false; }
   }
   savingNow = false;
-  if (ok) markSaved(); else drawSaveState();
+  if (ok) { markSaved(); window.collab?.colorSaved?.(projectColor); } // (its chip on All projects takes its saved colour)
+  else drawSaveState();
 }
 // The project as it is now counts as saved (after Save, or when it's loaded:
 // then a kept draft stays until restoreDraft has looked at it)
@@ -276,6 +291,15 @@ function drawSaveState() {
   else if (!saveBtn.classList.contains('restored')) saveBtn.title = 'You have unsaved changes. Save them (Ctrl+S)';
   document.getElementById('undoBtn').disabled = !undoStack.length;
   document.getElementById('redoBtn').disabled = !redoStack.length;
+  // Viewing someone else's project: the same buttons in the same places, but greyed out
+  saveBtn.disabled = readOnly;
+  if (readOnly) {
+    saveBtn.textContent = 'Save';
+    for (const b of [saveBtn, document.getElementById('undoBtn'), document.getElementById('redoBtn')]) b.title = 'View only: only the project\'s owner can change it';
+  } else {
+    document.getElementById('undoBtn').title = 'Undo (Ctrl+Z)';
+    document.getElementById('redoBtn').title = 'Redo (Ctrl+Shift+Z)';
+  }
 }
 saveBtn.addEventListener('click', saveProject);
 document.getElementById('undoBtn').addEventListener('click', undo);
@@ -307,7 +331,7 @@ function syncGroupColors() {
     [...names].forEach((g, i) => { groupColors[g] = i % PALETTE.length; });
   }
   for (const g of Object.keys(groupColors)) {
-    if (!names.has(g) || !PALETTE[groupColors[g]]) delete groupColors[g];
+    if (!names.has(g) || !groupColorOf(groupColors[g])) delete groupColors[g];
   }
   for (const g of names) {
     if (g in groupColors) continue;
@@ -518,16 +542,16 @@ function askConfirm(title, html, okLabel) {
   });
 }
 
-// "+ New task": a task from today to two days from now, opened in its sheet
-// with the name ready to type over. Closing the sheet without changing it
-// removes it again, so no empty "New task" is left behind.
-document.getElementById('newTaskBtn').onclick = () => {
+// "+ New task" (no longer a button: tasks are made by dragging across the chart):
+// a task from today to two days from now, opened in its sheet with the name ready
+// to type over. Closing the sheet without changing it removes it again.
+document.getElementById('newTaskBtn')?.addEventListener('click', () => {
   const today = todayString();
   const t = { id: uid(), name: 'New task', group: '', start: today, end: fmt(new Date(+parse(today) + 2 * DAY)), milestone: '' };
   tasks.push(t);
   save(); render();
   openTaskSheet(t.id, { isNew: true });
-};
+});
 
 function removeTask(id) {
   tasks = tasks.filter(t => t.id !== id);
@@ -646,29 +670,36 @@ function scrollToToday() {
   scrollToDay(dayNumber(parse(todayString())), timeLength() / 4);
 }
 // Today: today's period in Day / Week / Month / Quarter, otherwise scroll to today
-document.getElementById('todayBtn')?.addEventListener('click', () => view ? openView(view, todayString()) : scrollToToday());
+document.getElementById('todayBtn')?.addEventListener('click', () => {
+  view ? openView(view, todayString()) : scrollToToday();
+  window.collab?.alignOverview?.(); // (the overview above: the same zoom, its days right above these)
+});
 
 // Overview: zoom so the whole project (first start to last end, plus a day on
 // each side) fits the visible width, and scroll to the top. Clicking again goes
 // back to the zoom and position from before.
 let overviewReturn = null; // { dayW, leftDay, top } while the overview is showing
+// (the button says Fit: with Firebase it also fits the projects in the overview above)
 document.getElementById('overviewBtn').onclick = () => {
   if (overviewReturn) {
     const back = overviewReturn;
     setZoom(back.dayW); // also clears overviewReturn
     scrollToDay(back.leftDay);
     chartEl.scrollTop = back.top;
-    return render(); // refresh the button
+    render(); // refresh the button
+    return window.collab?.alignOverview?.();
   }
-  if (!tasks.length) return;
+  const others = window.collab?.overviewSpan?.() || []; // (the projects in the overview above, ms)
+  if (!tasks.length && !others.length) return;
   const back = { dayW: renderedDayW, leftDay: getScrollDay(), top: chartEl.scrollTop };
-  const first = Math.min(...tasks.map(t => +parse(t.start))), last = Math.max(...tasks.map(t => +parse(t.end)));
-  const days = daysBetween(first, last) + 1 + 2; // the project plus a day either side
+  const first = Math.min(...tasks.map(t => +parse(t.start)), ...others), last = Math.max(...tasks.map(t => +parse(t.end)), ...others);
+  const days = daysBetween(first, last) + 1 + 2; // everything plus a day either side
   setZoom(fitZoom(dayNumber(first) - 1, days)); // setZoom keeps it within the zoom limits
   scrollToDay(dayNumber(first) - 1, edgeOffset());
   chartEl.scrollTop = 0;
   overviewReturn = back;
   render(); // refresh the button
+  window.collab?.alignOverview?.(); // (the overview above: the same zoom, its days right above these)
 };
 
 // ---- Sharing: save the chart as an image ----
@@ -901,7 +932,7 @@ function renderTurned(min, totalDays, zoomH, todayDate) {
   if (!turnedOn() || exportOpts) return;
   const H = Math.max(TURNED_MIN_ROW, zoomH);
   syncGroupColors();
-  const colour = g => g ? PALETTE[groupColors[g]] || UNGROUPED_COLOR : UNGROUPED_COLOR;
+  const colour = g => g ? groupColorOf(groupColors[g]) || UNGROUPED_COLOR : UNGROUPED_COLOR;
   const sorted = [...tasks].sort((a, b) => a.start.localeCompare(b.start));
   const groups = new Map();
   for (const t of sorted) { const g = t.group || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(t); }
@@ -1106,11 +1137,12 @@ function openTaskSheet(id, { isNew = false, comments = false } = {}) {
   sheetTaskId = id;
   sheetLinksFor = null;
   sheetAdding = null;
+  sheetPop = null;
   sheetNew = isNew ? JSON.stringify(tasks.find(t => t.id === id)) : null;
   window.collab?.openThread(id);
   drawSheet();
   if (!sheet.open) { sheet.showModal(); sheetOpenedAt = Date.now(); }
-  sheet.scrollTop = 0;
+  sheetBody.scrollTop = 0;
   if (isNew) { const n = sheetBody.querySelector('.sheet-name'); n.focus(); n.select(); } // type the name straight away
   else sheetBody.focus({ preventScroll: true }); // just the information: nothing selected, no keyboard
   if (comments) window.collab?.showThread(); // from a task's 💬: straight to its comments
@@ -1134,32 +1166,79 @@ function sheetLinks(links, owner) {
       : `<button type="button" class="sheet-adder" data-add="link:${owner}">+ Add link</button>`}`;
 }
 
+// The task sheet. At the top, a strip in the group's colour; then the done circle
+// (or the progress ring, with subtasks), the name, ⋯ (Delete task) and ✕. Under the
+// name, its details as chips: the group, the dates, the milestone, its links and
+// "Add link". A chip opens a small picker (the dates, a new link) right under it.
+// Then the subtasks, and the comments in their own grey area at the bottom.
+let sheetPop = null; // the open picker: 'dates', 'link' or 'more' (⋯)
+const ICON_CAL = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+const ICON_DIAMOND = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+const ICON_MORE = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>';
+const ICON_PLUS = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+// "15 Oct – 22 Oct" (with the year when it isn't this year's)
+function sheetDateText(t) {
+  const thisYear = todayString().slice(0, 4);
+  const short = s => parse(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(s.slice(0, 4) !== thisYear ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+  return `${short(t.start)} – ${short(t.end)}`;
+}
+
+// The head, the chips and the subtasks heading: the same for editing and viewing
+function sheetTop(t, subs, pct, edit) {
+  const doneSubs = subs.filter(s => s.done).length;
+  const len = daysBetween(parse(t.start), parse(t.end)) + 1;
+  const days = `<span class="sheet-muted">· ${len} day${len > 1 ? 's' : ''}</span>`;
+  const msText = { start: 'Milestone at start', end: 'Milestone at end' }[t.milestone];
+  const circle = subs.length
+    ? `<span class="sheet-ring" style="--pct:${pct}" role="img" aria-label="${doneSubs} of ${subs.length} subtasks done" title="${doneSubs}/${subs.length} subtasks done (${pct}%)"></span>`
+    : edit ? `<button type="button" class="sheet-done-btn${t.done ? ' checked' : ''}" aria-pressed="${!!t.done}" title="${t.done ? 'Done. Click to mark as not done' : 'Click to mark as done'}">${t.done ? '✓' : ''}</button>`
+    : subTick(t.done, true);
+  const links = (t.links || []).map((l, i) => `<span class="sheet-chip sheet-link-chip">${CLIP_ICON}<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(l.url))}</a>${edit
+    ? `<button type="button" class="sheet-link-del" data-owner="task" data-index="${i}" title="Remove link" aria-label="Remove link">✕</button>` : ''}</span>`).join('');
+  const ms = v => `<option value="${v}"${(t.milestone || '') === v ? ' selected' : ''}>${{ '': 'No milestone', start: 'At start', end: 'At end' }[v]}</option>`;
+  return `
+    <div class="sheet-strip" aria-hidden="true"></div>
+    <div class="sheet-head">
+      ${circle}
+      ${edit ? `<input class="sheet-name" value="${esc(t.name)}" aria-label="Task name" autocomplete="off">` : `<h2 class="sheet-title">${esc(t.name)}</h2>`}
+      ${edit ? `<button type="button" class="sheet-icon sheet-more" data-pop="more" aria-expanded="${sheetPop === 'more'}" title="More" aria-label="More">${ICON_MORE}</button>` : ''}
+      <button type="button" class="sheet-icon sheet-close" title="Close" aria-label="Close">✕</button>
+      ${sheetPop === 'more' ? `<div class="sheet-pop sheet-more-pop" role="menu"><button type="button" class="sheet-delete" role="menuitem">Delete task</button></div>` : ''}
+    </div>
+    <div class="sheet-chips">
+      ${edit
+        ? `<label class="sheet-chip sheet-group-chip" title="Group"><span class="sheet-dot"></span><input class="sheet-group" list="groupList" value="${esc(t.group || '')}" placeholder="Group" autocomplete="off" aria-label="Group"></label>
+           <button type="button" class="sheet-chip" data-pop="dates" aria-expanded="${sheetPop === 'dates'}" title="Change the dates">${ICON_CAL}${sheetDateText(t)}${days}</button>
+           <label class="sheet-chip sheet-ms-chip${t.milestone ? '' : ' empty'}" title="Milestone">${ICON_DIAMOND}${msText || 'Milestone'}<select class="sheet-ms" aria-label="Milestone">${ms('')}${ms('start')}${ms('end')}</select></label>
+           ${links}
+           <button type="button" class="sheet-chip dashed" data-pop="link" aria-expanded="${sheetPop === 'link'}">${CLIP_ICON}Add link</button>`
+        : `<span class="sheet-chip${t.group ? '' : ' empty'}"><span class="sheet-dot"></span>${t.group ? esc(t.group) : 'No group'}</span>
+           <span class="sheet-chip">${ICON_CAL}${sheetDateText(t)}${days}</span>
+           ${t.milestone ? `<span class="sheet-chip">${ICON_DIAMOND}${msText}</span>` : ''}
+           ${links}`}
+      ${sheetPop === 'dates' ? `<div class="sheet-pop" data-for="dates">
+          <label>Start<input type="date" class="sheet-start" value="${t.start}"></label>
+          <label>End<input type="date" class="sheet-end" value="${t.end}"></label>
+          <div class="error sheet-date-error"></div>
+        </div>` : ''}
+      ${sheetPop === 'link' ? `<div class="sheet-pop sheet-link-pop" data-for="link">
+          <form class="sheet-add-link" data-owner="task"><input type="text" inputmode="url" autocomplete="off" placeholder="Paste a link (Google Doc, website…)"><button class="primary">Add</button></form><div class="error"></div>
+        </div>` : ''}
+    </div>
+    <h3 class="sheet-sec">Subtasks${subs.length ? `<span class="sheet-muted"> · ${doneSubs} of ${subs.length} · ${pct}%</span>` : ''}</h3>
+    ${subs.length ? `<div class="sheet-progress"><span style="width:${pct}%"></span></div>` : ''}`;
+}
+
 function drawSheet() {
   const t = tasks.find(x => x.id === sheetTaskId);
   if (!t) { if (sheet.open) sheet.close(); return; }
   syncGroupColors();
-  const c = t.group ? PALETTE[groupColors[t.group]] || UNGROUPED_COLOR : UNGROUPED_COLOR;
+  const c = t.group ? groupColorOf(groupColors[t.group]) || UNGROUPED_COLOR : UNGROUPED_COLOR;
   const subs = t.subtasks || [], pct = progressOf(t);
-  const ms = v => `<option value="${v}"${(t.milestone || '') === v ? ' selected' : ''}>${{ '': 'None', start: 'At start', end: 'At end' }[v]}</option>`;
-  if (readOnly) return drawSheetViewOnly(t, c, subs, pct);
-  sheetBody.innerHTML = `
-    <div class="sheet-head" style="--bar:${c.bg}">
-      <input class="sheet-name" value="${esc(t.name)}" aria-label="Task name" autocomplete="off">
-      <button type="button" class="sheet-close" title="Close">✕</button>
-    </div>
-    <div class="sheet-status">${subs.length
-      ? `${subs.filter(s => s.done).length}/${subs.length} subtasks · ${pct}%`
-      : `<label class="sheet-check"><input type="checkbox" class="sheet-done" ${t.done ? 'checked' : ''}> Done</label>`}</div>
-    <div class="sheet-grid">
-      <label>Start <input type="date" class="sheet-start" value="${t.start}"></label>
-      <label>End <input type="date" class="sheet-end" value="${t.end}"></label>
-      <label>Group <input class="sheet-group" list="groupList" value="${esc(t.group || '')}" placeholder="none" autocomplete="off"></label>
-      <label>Milestone <select class="sheet-ms">${ms('')}${ms('start')}${ms('end')}</select></label>
-    </div>
-    <div class="error sheet-date-error"></div>
-    <h3>Links</h3>
-    ${sheetLinks(t.links, 'task')}
-    <h3>Subtasks</h3>
+  sheetBody.style.setProperty('--bar', c.bg);
+  if (readOnly) return drawSheetViewOnly(t, subs, pct);
+  sheetBody.innerHTML = `${sheetTop(t, subs, pct, true)}
     <ul class="sheet-subs">${subs.map(s => `<li data-sub="${s.id}">
         <div class="sheet-sub-row">
           <input type="checkbox" class="sheet-sub-done" ${s.done ? 'checked' : ''} aria-label="Done">
@@ -1172,13 +1251,20 @@ function drawSheet() {
       </li>`).join('')}</ul>
     ${sheetAdding === 'sub'
       ? `<form class="sheet-add-sub"><input autocomplete="off" placeholder="New subtask"><button class="primary">Add</button></form>`
-      : `<button type="button" class="sheet-adder" data-add="sub">+ Add subtask</button>`}
-    <div class="sheet-thread-slot"></div>
-    <div class="sheet-foot">
-      <button type="button" class="sheet-delete">Delete task</button>
-      <button type="button" class="primary sheet-close">Done</button>
-    </div>`;
+      : `<button type="button" class="sheet-adder" data-add="sub">${ICON_PLUS}Add subtask</button>`}
+    <div class="sheet-thread-slot"></div>`;
+  fitGroupInput(sheetBody.querySelector('.sheet-group'));
+  placeSheetPop();
   window.collab?.placeThread(sheetBody.querySelector('.sheet-thread-slot')); // the comments (kept across redraws)
+}
+
+// A picker opens right under its chip (and stays inside the sheet)
+function placeSheetPop() {
+  const pop = sheetBody.querySelector('.sheet-pop[data-for]');
+  if (!pop) return;
+  const chip = sheetBody.querySelector(`[data-pop="${pop.dataset.for}"]`), box = pop.parentElement;
+  pop.style.top = `${chip.offsetTop + chip.offsetHeight + 6}px`;
+  pop.style.left = `${Math.max(0, Math.min(chip.offsetLeft, box.clientWidth - pop.offsetWidth))}px`;
 }
 
 // A done / not done mark that only shows (viewing someone else's project): a
@@ -1186,30 +1272,11 @@ function drawSheet() {
 const subTick = (done, round) => `<span class="sub-tick${done ? ' on' : ''}${round ? ' round' : ''}" role="img" aria-label="${done ? 'Done' : 'Not done yet'}"
   title="${done ? 'Done' : 'Not done yet'} (only the project's owner can change this)">${done ? '✓' : ''}</span>`;
 
-// The sheet when viewing someone else's project: the same information as plain
-// text (nothing that looks like it could be changed), a note saying so, and the comments
-function drawSheetViewOnly(t, c, subs, pct) {
-  const day = s => parse(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-  const field = (name, value, none) => `<div class="sheet-field"><span>${name}</span><b${none ? ' class="none"' : ''}>${value}</b></div>`;
-  sheetBody.innerHTML = `
-    <div class="sheet-head" style="--bar:${c.bg}">
-      <h2 class="sheet-title">${esc(t.name)}</h2>
-      <button type="button" class="sheet-close" title="Close">✕</button>
-    </div>
-    <p class="sheet-ro-note">${'<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>'}View only: you can read this task and write comments. Only the project's owner can change it.</p>
-    <div class="sheet-status" style="--bar:${c.bg}">${subs.length
-      ? `${subs.filter(s => s.done).length}/${subs.length} subtasks done · ${pct}%`
-      : `<span class="sheet-state">${subTick(t.done, true)} ${t.done ? 'Done' : 'Not done yet'}</span>`}</div>
-    <div class="sheet-grid sheet-fields">
-      ${field('Start', day(t.start))}
-      ${field('End', day(t.end))}
-      ${field('Group', t.group ? esc(t.group) : 'None', !t.group)}
-      ${field('Milestone', { start: 'At start', end: 'At end' }[t.milestone] || 'None', !t.milestone)}
-    </div>
-    <h3>Links</h3>
-    ${sheetLinks(t.links, 'task')}
-    <h3>Subtasks</h3>
-    ${subs.length ? `<ul class="sheet-subs" style="--bar:${c.bg}">${subs.map(s => `<li data-sub="${s.id}">
+// The sheet when viewing someone else's project: the same layout, with nothing
+// that looks like it could be changed, a note saying so, and the comments
+function drawSheetViewOnly(t, subs, pct) {
+  sheetBody.innerHTML = `${sheetTop(t, subs, pct, false)}
+    ${subs.length ? `<ul class="sheet-subs">${subs.map(s => `<li data-sub="${s.id}">
         <div class="sheet-sub-row">
           ${subTick(s.done)}
           <span class="sheet-sub-no" title="Subtask ${s.no}">${s.no}</span>
@@ -1218,8 +1285,8 @@ function drawSheetViewOnly(t, c, subs, pct) {
         </div>
         ${sheetLinksFor === s.id ? `<div class="sheet-sub-linkbox">${sheetLinks(s.links, s.id)}</div>` : ''}
       </li>`).join('')}</ul>` : '<p class="sheet-none">None</p>'}
-    <div class="sheet-thread-slot"></div>
-    <div class="sheet-foot"><span></span><button type="button" class="primary sheet-close">Close</button></div>`;
+    <p class="sheet-ro-note">${'<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>'}View only: you can read this task and write comments. Only the project's owner can change it.</p>
+    <div class="sheet-thread-slot"></div>`;
   window.collab?.placeThread(sheetBody.querySelector('.sheet-thread-slot'));
 }
 
@@ -1233,6 +1300,14 @@ function sheetCommit(focusSel) {
 sheetBody.addEventListener('click', async e => {
   const t = sheetTask();
   if (e.target.closest('.sheet-close')) return sheet.close();
+  const popBtn = e.target.closest('[data-pop]');
+  if (popBtn && !readOnly) { // a chip's picker (or ⋯): open it, or close it again
+    sheetPop = sheetPop === popBtn.dataset.pop ? null : popBtn.dataset.pop;
+    drawSheet();
+    return sheetBody.querySelector('.sheet-pop input')?.focus();
+  }
+  if (sheetPop && !e.target.closest('.sheet-pop')) { sheetPop = null; drawSheet(); } // a click elsewhere closes it
+  if (e.target.closest('.sheet-done-btn') && !readOnly) { t.done = !t.done; return sheetCommit(); } // (its done circle)
   const adder = e.target.closest('.sheet-adder');
   if (adder) { // "+ Add link" / "+ Add subtask": show the field, ready to type
     sheetAdding = adder.dataset.add;
@@ -1285,9 +1360,20 @@ sheetBody.addEventListener('submit', e => {
     if (!url) { f.nextElementSibling.textContent = 'That doesn\'t look like a web link.'; return; }
     (sheetOwner(f.dataset.owner).links ||= []).push({ url });
     sheetAdding = null;
+    sheetPop = null;
     sheetCommit();
   }
 });
+// Esc closes an open picker first, then the sheet
+sheet.addEventListener('cancel', e => { if (sheetPop) { e.preventDefault(); sheetPop = null; drawSheet(); } });
+// The group chip grows with its name
+sheetBody.addEventListener('input', e => { if (e.target.matches('.sheet-group')) fitGroupInput(e.target); });
+function fitGroupInput(el) {
+  const ctx = (fitGroupInput.ctx ||= document.createElement('canvas').getContext('2d'));
+  const cs = getComputedStyle(el);
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  el.style.width = `${Math.ceil(ctx.measureText(el.value || el.placeholder).width) + 2}px`;
+}
 // Tap outside the sheet closes it (but not the second click of a double-click that opened it)
 sheet.addEventListener('click', e => { if (e.target === sheet && Date.now() - sheetOpenedAt > 500) sheet.close(); });
 
@@ -1422,17 +1508,25 @@ document.getElementById('importFile').onchange = async e => {
 };
 
 // ---- Group colours (bar fill + readable text colour) ----
-const PALETTE = [
-  { bg: '#7B1FD1', fg: '#fff' },    // purple
-  { bg: '#F2214F', fg: '#fff' },    // coral red
-  { bg: '#00A88C', fg: '#fff' },    // teal
-  { bg: '#FFA21F', fg: '#3a2200' }, // amber
-  { bg: '#2F5FE8', fg: '#fff' },    // royal blue
-  { bg: '#FF5A0F', fg: '#fff' },    // orange
-  { bg: '#0EA5FF', fg: '#fff' },    // sky blue
-  { bg: '#FFCC14', fg: '#3a2c00' }, // yellow
+const PALETTE = [ // (soft colours from the logo's family; the text on them is worked out)
+  { bg: '#9C95E6', fg: '#fff' },    // lavender
+  { bg: '#E9806B', fg: '#fff' },    // coral
+  { bg: '#5FB3A1', fg: '#fff' },    // teal
+  { bg: '#E8B04A', fg: '#2a2540' }, // honey
+  { bg: '#7194DE', fg: '#fff' },    // blue
+  { bg: '#EE9A63', fg: '#2a2540' }, // apricot
+  { bg: '#6CB8E2', fg: '#2a2540' }, // sky
+  { bg: '#E7C65A', fg: '#2a2540' }, // butter
 ];
 const UNGROUPED_COLOR = { bg: '#6E6E78', fg: '#fff' };
+// A group's colour: one of the palette's (its number), or any colour (a hex code,
+// chosen with the group's colour dot). null when it isn't a colour.
+function groupColorOf(v) {
+  if (typeof v === 'number' || /^\d+$/.test(v)) return PALETTE[+v] || null;
+  if (typeof v !== 'string' || !/^#[0-9a-f]{6}$/i.test(v)) return null;
+  const n = parseInt(v.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return { bg: v, fg: (r * 299 + g * 587 + b * 114) / 1000 > 160 ? '#2a2540' : '#fff' }; // (dark text on light colours)
+}
 
 // ---- Collapsed groups (persisted) ----
 const COLLAPSED_KEY = perProject('simple-gantt-collapsed');
@@ -2198,6 +2292,8 @@ function render() {
   document.getElementById('nextBtn').title = `Next ${unit}`;
   // (› sits just left of the chart's scroll bar, if it has one)
   chartEl.parentElement.style.setProperty('--sbw', `${chartEl.offsetWidth - chartEl.clientWidth}px`);
+  sbwWatch ||= new ResizeObserver(() => chartEl.parentElement.style.setProperty('--sbw', `${chartEl.offsetWidth - chartEl.clientWidth}px`));
+  sbwWatch.disconnect(); sbwWatch.observe(chartEl); sbwWatch.observe(chartEl.querySelector('.track') || chartEl); // (the scrollbar can come or go later)
 
   // Header rows, top to bottom: quarter, month + year, ISO week, day number.
   // Quarter, month and week labels sit in a block as wide as their period and
@@ -2221,7 +2317,7 @@ function render() {
       grid += `<div class="day${cls}" style="left:${i * dayW}px;width:${dayW}px"></div>`;
       if (dayW >= 18) {
         const label = dayW >= 70 ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }) : d.getUTCDate();
-        head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}${view === 'day' && viewRange?.start === fmt(d) ? ' shown' : ''}" data-view="day" data-date="${fmt(d)}" title="Show ${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}" style="left:${i * dayW}px;width:${dayW}px">${label}</div>`;
+        head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}${fmt(d) === todayString() ? ' is-today' : ''}${view === 'day' && viewRange?.start === fmt(d) ? ' shown' : ''}" data-view="day" data-date="${fmt(d)}" title="Show ${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}" style="left:${i * dayW}px;width:${dayW}px">${fmt(d) === todayString() ? `<span class="today-pill">${label}</span>` : label}</div>`;
       }
     }
     if (i === 0) continue;
@@ -2271,7 +2367,7 @@ function render() {
     groupNames.map(g => `<option value="${esc(g)}">`).join('');
 
   syncGroupColors();
-  const groupColor = new Map(Object.entries(groupColors).map(([g, i]) => [g, PALETTE[i]]));
+  const groupColor = new Map(Object.entries(groupColors).map(([g, v]) => [g, groupColorOf(v) || UNGROUPED_COLOR]));
 
   // Collapse all / Expand all: above the task list, when there are groups
   // The list's heading, "∨ Tasks": with groups, its chevron (right above theirs)
@@ -2300,9 +2396,10 @@ function render() {
       }).join('');
       labels += `<div class="row group-row ghead" ${rowGroup} style="${colorVars}">
           <button class="toggle${isCollapsed ? ' shut' : ''}" data-toggle="${esc(g)}" title="${isCollapsed ? 'Expand' : 'Collapse'} group" aria-expanded="${!isCollapsed}"><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          <i class="group-dot" aria-hidden="true"></i>
+          ${g && !readOnly ? `<button type="button" class="group-dot" data-group-color="${esc(g)}" title="Change the group's colour" aria-label="Change the colour of ${esc(g)}"></button>` : '<i class="group-dot" aria-hidden="true"></i>'}
           <span${g ? ` class="name" data-rename-group="${esc(g)}" title="Click to rename the group"` : ''}>${esc(groupLabel(g))}</span>
           ${isCollapsed ? `<small class="count">${list.length} task${list.length > 1 ? 's' : ''}</small>` : ''}
+          ${g ? `<button type="button" class="preset-save" data-preset-group="${esc(g)}" title="Save as an activity group (to use again in any project)" aria-label="Save ${esc(g)} as an activity group"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>` : ''}
         </div>`;
       rows += `<div class="row ghead" ${rowGroup} style="position:relative;${colorVars}">
         <div class="group-bar" data-group="${esc(g)}" style="left:${gLeft}px;width:${gLen * dayW}px"
@@ -2400,6 +2497,7 @@ function render() {
   if (!drag || !drag.moved) drawLinks();
   tidyHeaderLabels();
   if (sheet.open && !sheetBody.contains(document.activeElement)) drawSheet(); // keep an open task sheet up to date
+  window.collab?.afterRender?.(); // (the overview above takes the same zoom and days)
 }
 
 // A quarter/month/week label that is being pushed out of view (its period is
@@ -2417,6 +2515,7 @@ function tidyHeaderLabels() {
 // shown anyway, at the left edge, so the three rows all start at the same point:
 // shortened if needed ("Week 13" → "W13" → "13", "Apr 2026" → "Apr") to end
 // before the next label. Clicking it shows that period, like the others.
+var sbwWatch = null; // (keeps ›, at the chart's right edge, clear of its scrollbar)
 function pinFirstLabels(visibleLeft) {
   const head = chartEl.querySelector('.track > .head');
   head?.querySelectorAll('.head-pin').forEach(el => el.remove());
@@ -2440,10 +2539,12 @@ function pinFirstLabels(visibleLeft) {
     pin.append(inner);
     head.append(pin);
     for (const t of texts) { inner.textContent = t; if (inner.offsetWidth <= room) break; }
+    if (inner.offsetWidth > room) pin.remove(); // (not even the shortest fits: no label, rather than one on top of the next)
   }
 }
 let tidyQueued = false;
 chartEl.addEventListener('scroll', () => {
+  window.collab?.followChart?.(); // (the overview above moves along)
   if (tidyQueued) return;
   tidyQueued = true;
   requestAnimationFrame(() => { tidyQueued = false; tidyHeaderLabels(); });
@@ -2543,3 +2644,268 @@ if (!CLOUD || localProject) { markSaved(true); restoreDraft(); } else drawSaveSt
   else scrollToToday();
 })();
 checkComingUp();
+
+// ---- Import Paste ----
+// Cells copied from Google Sheets or Excel (a row or a column, tabs between the
+// cells) become a group of deadlines: each date a one-day task, marked as a
+// milestone. A cell of text next to a date (above it, in a row) is its name; text
+// before the first date is the group's name. Opened from Export ▾ → Import Paste…,
+// or by pasting (Ctrl+V) anywhere on the project page outside a field.
+const PASTE_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, maj: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, okt: 10, nov: 11, dec: 12 };
+
+// A date in a cell: 2026-10-18, 18/10/2026, 18.10.2026, 18 Oct, 18 Oct 2026,
+// Oct 18, 2026, Sun, 18 Oct 2026 (Swedish month names too): { y, m, d } (y is
+// missing when the cell has no year), or null when it isn't a date
+function pasteParts(cell) {
+  let s = String(cell || '').trim().replace(/^(mon|tue|wed|thu|fri|sat|sun|mån|tis|ons|tor|fre|lör|sön)[a-zåäö]*\.?,?\s+/i, ''); // (a weekday before it)
+  if (!s) return null;
+  let y, m, d, mt;
+  if ((mt = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) [, y, m, d] = mt.map(Number);
+  else if ((mt = s.match(/^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2}|\d{4}))?$/))) {
+    [d, m, y] = [+mt[1], +mt[2], mt[3] && +mt[3]];
+    if (m > 12 && d <= 12) [d, m] = [m, d]; // (month first, like 10/18/2026)
+  } else if ((mt = s.match(/^(\d{1,2})\.?\s*([a-zåäö]+)\.?,?\s*(\d{4})?$/i))) [d, m, y] = [+mt[1], PASTE_MONTHS[mt[2].slice(0, 3).toLowerCase()], mt[3] && +mt[3]];
+  else if ((mt = s.match(/^([a-zåäö]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?$/i))) [m, d, y] = [PASTE_MONTHS[mt[1].slice(0, 3).toLowerCase()], +mt[2], mt[3] && +mt[3]];
+  else return null;
+  if (!m || m > 12 || !d || d > 31) return null;
+  if (y && y < 100) y += 2000;
+  return { y: y || undefined, m, d };
+}
+// "YYYY-MM-DD", or null when there's no such day (31 Feb)
+function pasteMake(y, m, d) { const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCMonth() === m - 1 ? fmt(t) : null; }
+// The year that puts a day and month nearest today
+function pasteNearestYear(m, d) {
+  const now = +parse(todayString()), ty = new Date(now).getUTCFullYear();
+  return [ty - 1, ty, ty + 1].filter(y => pasteMake(y, m, d))
+    .sort((a, b) => Math.abs(+parse(pasteMake(a, m, d)) - now) - Math.abs(+parse(pasteMake(b, m, d)) - now))[0] || ty;
+}
+
+// The pasted text → { header, items: [{ name, start, end }], skipped: [cells],
+// year }. Dates without a year get `year` (or, without one, the year that puts the
+// first of them nearest today); `year` comes back as the year used (null when every
+// date has its own). A list that runs past New Year (Dec, then Jan) goes on into
+// the next year.
+function readPaste(text, year) {
+  const grid = String(text || '').replace(/\r/g, '').replace(/\n+$/, '').split('\n').map(line => line.split('\t'));
+  const width = Math.max(0, ...grid.map(r => r.length));
+  const parts = grid.map(r => r.map(pasteParts));
+  const inRow = Math.max(0, ...parts.map(r => r.filter(Boolean).length));
+  const inCol = Math.max(0, ...Array.from({ length: width }, (_, i) => parts.filter(r => r[i]).length));
+  const across = inRow > inCol; // (a row of dates: each column is one deadline)
+  const lines = across ? Array.from({ length: width }, (_, i) => grid.map(r => r[i] ?? '')) : grid;
+  let header = '', y = year || null, firstYear = null, prev = null;
+  const items = [], skipped = [];
+  for (const cells of lines) {
+    const found = [], words = [];
+    for (const cell of cells) {
+      const p = pasteParts(cell);
+      let date = null;
+      if (p && p.y) date = pasteMake(p.y, p.m, p.d);
+      else if (p) {
+        y ||= pasteNearestYear(p.m, p.d);
+        firstYear ||= y;
+        date = pasteMake(y, p.m, p.d);
+        if (date && prev && +parse(date) < +parse(prev) - 60 * DAY) date = pasteMake(++y, p.m, p.d); // (past New Year)
+      }
+      if (date) { found.push(date); prev = date; }
+      else if (cell.trim()) words.push(cell.trim());
+    }
+    found.sort();
+    if (!found.length) {
+      if (!items.length && !header && words.length) header = words[0]; // (a heading before the dates)
+      else skipped.push(...words);
+      continue;
+    }
+    items.push({ name: words[0] || '', start: found[0], end: found[found.length - 1] });
+  }
+  items.forEach((it, i) => { it.name ||= `Deadline ${i + 1}`; });
+  return { header, items, skipped, year: firstYear };
+}
+
+const pasteDialog = document.getElementById('pasteDialog');
+const pasteText = document.getElementById('pasteText');
+const pasteGroup = document.getElementById('pasteGroup');
+const pastePreview = document.getElementById('pastePreview');
+const pasteNote = document.getElementById('pasteNote');
+const pasteOk = document.getElementById('pasteOk');
+const pasteYear = document.getElementById('pasteYear');
+let pasteItems = [];
+
+// A group name no group has yet ("Deadlines", "Deadlines 2", …)
+function freeGroupName(base) {
+  const used = new Set(tasks.map(t => t.group));
+  let name = base;
+  for (let i = 2; used.has(name); i++) name = `${base} ${i}`;
+  return name;
+}
+
+function drawPaste(fromText) {
+  if (fromText) {
+    const r = readPaste(pasteText.value);
+    pasteItems = r.items.map(it => ({ ...it, use: true }));
+    pasteGroup.value = r.header || freeGroupName('Deadlines');
+    pasteDialog.dataset.skipped = r.skipped.join(', ');
+    // Dates without a year: the year to put them in (the nearest one to start with)
+    pasteYear.closest('label').hidden = !r.year;
+    if (r.year) {
+      const ty = +todayString().slice(0, 4);
+      pasteYear.innerHTML = [...new Set([ty - 1, ty, ty + 1, ty + 2, r.year])].sort()
+        .map(v => `<option value="${v}"${v === r.year ? ' selected' : ''}>${v}</option>`).join('');
+    }
+  }
+  const day = s => parse(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  pastePreview.innerHTML = pasteItems.map((it, i) => `<li data-i="${i}">
+      <input type="checkbox" class="paste-use" ${it.use ? 'checked' : ''} aria-label="Import this one">
+      <input class="paste-name" value="${esc(it.name)}" aria-label="Name" autocomplete="off">
+      <span class="paste-when">${it.start === it.end ? day(it.start) : `${day(it.start)} – ${day(it.end)}`}</span>
+    </li>`).join('');
+  pastePreview.hidden = !pasteItems.length;
+  const n = pasteItems.filter(it => it.use).length;
+  const group = pasteGroup.value.trim();
+  const exists = group && tasks.some(t => t.group === group);
+  const skipped = pasteDialog.dataset.skipped;
+  pasteNote.innerHTML = !pasteText.value.trim() ? ''
+    : !pasteItems.length ? 'No dates found. Copy the cells with the dates in Google Sheets or Excel and paste them here.'
+    : `${n} deadline${n === 1 ? '' : 's'} into ${exists ? 'the existing' : 'a new'} group <b>${esc(group || 'without a name')}</b>.${skipped ? ` Not dates (left out): ${esc(skipped)}.` : ''}`;
+  pasteOk.disabled = !n;
+  pasteOk.textContent = n ? `Import ${n}` : 'Import';
+}
+
+function openPaste(text = '') {
+  if (readOnly) return;
+  pasteText.value = text;
+  pasteDialog.returnValue = '';
+  drawPaste(true);
+  pasteDialog.showModal();
+  (text ? pasteGroup : pasteText).focus();
+  if (text) pasteGroup.select();
+}
+
+pasteText.addEventListener('input', () => drawPaste(true));
+// Another year: the same deadlines (names and ticks kept), moved to that year
+pasteYear.addEventListener('change', () => {
+  const r = readPaste(pasteText.value, +pasteYear.value);
+  pasteItems = r.items.map((it, i) => ({ ...it, name: pasteItems[i]?.name ?? it.name, use: pasteItems[i]?.use ?? true }));
+  drawPaste(false);
+});
+pasteGroup.addEventListener('input', () => drawPaste(false));
+pastePreview.addEventListener('input', e => {
+  const it = pasteItems[+e.target.closest('li').dataset.i];
+  if (e.target.matches('.paste-name')) it.name = e.target.value;
+});
+pastePreview.addEventListener('change', e => {
+  if (!e.target.matches('.paste-use')) return;
+  pasteItems[+e.target.closest('li').dataset.i].use = e.target.checked;
+  drawPaste(false);
+});
+pasteDialog.addEventListener('close', () => {
+  if (pasteDialog.returnValue !== 'ok') return;
+  const group = pasteGroup.value.trim();
+  const milestone = document.getElementById('pasteMilestone').checked ? 'end' : '';
+  const add = pasteItems.filter(it => it.use).map(it => ({
+    id: uid(), name: it.name.trim() || 'Deadline', group, start: it.start, end: it.end, milestone, done: false,
+  }));
+  if (!add.length) return;
+  tasks.push(...add);
+  save(); render();
+  scrollToDay(dayNumber(parse(add.map(t => t.start).sort()[0])), 80); // (to the first one)
+});
+document.getElementById('pasteImportBtn').onclick = () => openPaste();
+// Pasting dates anywhere on the project page (not into a field) opens it, filled in
+document.addEventListener('paste', e => {
+  const root = document.documentElement;
+  if (readOnly || (root.classList.contains('cloud') && !root.classList.contains('page-app'))) return;
+  if (e.target.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector('dialog[open]')) return;
+  const text = e.clipboardData?.getData('text/plain');
+  if (!text || !readPaste(text).items.length) return;
+  e.preventDefault();
+  openPaste(text);
+});
+
+// ---- The sidebar (your projects and presets), next to the chart ----
+// Folded away by default; the button at the top left shows it (it pushes the
+// chart over) or folds it away again. Remembered on this computer.
+(() => {
+  const btn = document.getElementById('sideToggle');
+  if (!btn) return;
+  const KEY = 'worknest-side-open';
+  const set = open => {
+    document.documentElement.classList.toggle('side-open', open);
+    btn.setAttribute('aria-expanded', open);
+    btn.title = btn.ariaLabel = open ? 'Hide your projects' : 'Show your projects';
+  };
+  let open = false;
+  try { open = localStorage.getItem(KEY) === '1'; } catch {}
+  set(open);
+  btn.addEventListener('click', () => {
+    open = !open;
+    set(open);
+    try { localStorage.setItem(KEY, open ? '1' : '0'); } catch {}
+    requestAnimationFrame(() => render()); // (the chart's width changed)
+  });
+})();
+
+// ---- A group's colour: its dot in the task list opens a picker (as the project's) ----
+// One of the swatches, any colour, or a hex code. A change like any other (Save).
+(() => {
+  const pop = document.createElement('div');
+  pop.className = 'menu color-pop group-color-pop';
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', "The group's colour");
+  pop.hidden = true;
+  pop.innerHTML = `<p class="color-pop-head">Group colour</p>
+    <div class="color-swatches">${PALETTE.map((c, i) => `<button type="button" data-gcolor="${i}" style="--c:${c.bg}" aria-label="${c.bg}" title="${c.bg}"></button>`).join('')}</div>
+    <div class="color-custom">
+      <input type="color" class="gc-native" title="Pick any colour" aria-label="Pick any colour">
+      <input class="gc-hex" maxlength="7" spellcheck="false" autocomplete="off" placeholder="#4f8ff7" aria-label="Colour as a hex code" title="A hex code, like #4f8ff7">
+    </div>
+    <div class="error gc-error"></div>`;
+  document.body.append(pop);
+  const native = pop.querySelector('.gc-native'), hex = pop.querySelector('.gc-hex'), err = pop.querySelector('.gc-error');
+  let group = null, anchor = null;
+
+  function drawPop() {
+    const v = groupColors[group], c = groupColorOf(v) || UNGROUPED_COLOR;
+    for (const b of pop.querySelectorAll('[data-gcolor]')) b.classList.toggle('on', String(v) === b.dataset.gcolor);
+    native.value = c.bg.toLowerCase();
+    if (document.activeElement !== hex) hex.value = typeof v === 'string' && v.startsWith('#') ? v : c.bg.toLowerCase();
+  }
+  function open(g, dot) {
+    group = g; anchor = dot;
+    err.textContent = '';
+    pop.hidden = false;
+    drawPop();
+    const r = dot.getBoundingClientRect();
+    pop.style.left = `${Math.max(8, Math.min(r.left - 8, innerWidth - pop.offsetWidth - 8))}px`;
+    pop.style.top = `${Math.min(r.bottom + 6, innerHeight - pop.offsetHeight - 8)}px`;
+    (pop.querySelector('.on') || hex).focus();
+  }
+  function close() { if (!pop.hidden) { pop.hidden = true; group = null; } }
+  function setColor(v) {
+    if (readOnly || !group || groupColors[group] === v) return;
+    groupColors[group] = v;
+    save(); render();
+    drawPop();
+  }
+  chartEl.addEventListener('click', e => {
+    const dot = e.target.closest('.group-dot[data-group-color]');
+    if (!dot || readOnly) return;
+    e.stopPropagation();
+    if (!pop.hidden && group === dot.dataset.groupColor) return close();
+    open(dot.dataset.groupColor, dot);
+  }, true);
+  pop.addEventListener('click', e => {
+    const sw = e.target.closest('[data-gcolor]');
+    if (sw) { setColor(+sw.dataset.gcolor); close(); }
+  });
+  native.addEventListener('input', () => { setColor(native.value.toLowerCase()); hex.value = native.value.toLowerCase(); });
+  hex.addEventListener('input', () => {
+    const ok = HEX.test(hex.value.trim());
+    err.textContent = ok || hex.value.trim().length < 4 ? '' : 'Use a hex code like #4f8ff7';
+    if (ok) setColor(normHex(hex.value));
+  });
+  hex.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (HEX.test(hex.value.trim())) close(); } });
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('.group-color-pop, .group-dot')) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) close(); });
+  chartEl.addEventListener('scroll', close, { passive: true });
+})();

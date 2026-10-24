@@ -6,32 +6,45 @@
 <title>WorkNest</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="app-icon.png">
-<meta name="theme-color" content="#1b1f3b">
+<meta name="theme-color" content="#ffffff">
 <!-- The ?v= version makes browsers fetch the new file after an update instead of
      reusing an old cached copy. Change it whenever any of the files changes. -->
-<link rel="stylesheet" href="styles.css?v=2026-10-12.49">
-<script src="firebase-config.js?v=2026-10-12.49"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="styles.css?v=2026-10-24.8">
+<script src="firebase-config.js?v=2026-10-24.8"></script>
 <script>
-  // With Firebase set up, show nothing of the app until collab.js knows which page to show
-  if (window.GANTT_FIREBASE) document.documentElement.classList.add('cloud', 'page-loading');
+  // With Firebase set up, the page to show depends on whether you're signed in, which
+  // takes Firebase a moment to tell. If you were signed in last time (remembered on
+  // this computer), the page you asked for shows straight away (All projects, or the
+  // project) and fills in when Firebase answers; only otherwise the start screen.
+  // Light or dark as chosen in the account menu (Auto: as the computer is set)
+  try { const t = localStorage.getItem('worknest-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+  if (window.GANTT_FIREBASE) {
+    let signedIn = false;
+    try { signedIn = localStorage.getItem('worknest-signed-in') === '1'; } catch {}
+    document.documentElement.classList.add('cloud',
+      !signedIn ? 'page-loading' : /[?&](p|local)=/.test(location.search) ? 'page-app' : 'page-projects');
+  }
 </script>
 </head>
 <body>
 <!-- Start page: signed out (filled by collab.js). Also where you land after signing out. -->
 <section id="startPage" class="start" aria-label="Welcome">
   <div class="start-inner">
-    <svg class="start-logo" viewBox="119 170 786 683" aria-hidden="true"><rect x="119" y="170" width="547" height="171" rx="85.5" fill="#ff6b4a"/><circle cx="818.5" cy="255.5" r="85.5" fill="#ff6b4a"/><circle cx="204.5" cy="511.5" r="85.5" fill="#ffc145"/><rect x="358" y="426" width="547" height="171" rx="85.5" fill="#ffc145"/><rect x="119" y="682" width="547" height="171" rx="85.5" fill="#b8b5ff"/><circle cx="818.5" cy="767.5" r="85.5" fill="#b8b5ff"/></svg>
-    <h1>WorkNest</h1>
+    <h1 class="start-title"><img class="start-logo" src="worknest-logo-white.svg" alt="WorkNest" width="320" height="65"></h1>
     <p class="start-tagline">Plan your projects and talk them through with your customers.</p>
     <div class="start-card" id="startCard"></div>
   </div>
   <p class="start-foot">Free · Works on your computer and your phone</p>
 </section>
 
-<!-- Your projects: signed in, no project open (filled by collab.js) -->
+<!-- All projects (filled by collab.js): the chips and the overview. On a project's
+     own page (?p= / ?local=) only its navy bar shows, above the editor (main). -->
 <section id="projectsPage" class="home" aria-label="Your projects">
   <header class="home-bar">
-    <a class="brand" href="./"><svg class="brand-logo" viewBox="119 170 786 683" aria-hidden="true"><rect x="119" y="170" width="547" height="171" rx="85.5" fill="#ff6b4a"/><circle cx="818.5" cy="255.5" r="85.5" fill="#ff6b4a"/><circle cx="204.5" cy="511.5" r="85.5" fill="#ffc145"/><rect x="358" y="426" width="547" height="171" rx="85.5" fill="#ffc145"/><rect x="119" y="682" width="547" height="171" rx="85.5" fill="#b8b5ff"/><circle cx="818.5" cy="767.5" r="85.5" fill="#b8b5ff"/></svg><span>WorkNest</span></a>
+    <a class="brand" href="./" title="All projects"><img class="brand-mark" src="icon.svg" alt="" width="32" height="32"><span class="brand-word"><img class="logo-light" src="worknest-logo-stacked.svg" alt="WorkNest" height="36"><img class="logo-dark" src="worknest-logo-stacked-white.svg" alt="WorkNest" height="36"></span></a>
     <label class="home-search"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20l-4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><input id="projectSearch" type="search" placeholder="Search projects" aria-label="Search projects" autocomplete="off"></label>
     <span class="spacer"></span>
   </header>
@@ -45,63 +58,61 @@
 <main>
   <!-- The top bar: WorkNest's logo (back to all projects) and your account -->
   <div class="app-head">
-    <a class="home-link" href="./" title="All projects" aria-label="All projects"><svg class="home-logo" viewBox="119 170 786 683" aria-hidden="true"><rect x="119" y="170" width="547" height="171" rx="85.5" fill="#ff6b4a"/><circle cx="818.5" cy="255.5" r="85.5" fill="#ff6b4a"/><circle cx="204.5" cy="511.5" r="85.5" fill="#ffc145"/><rect x="358" y="426" width="547" height="171" rx="85.5" fill="#ffc145"/><rect x="119" y="682" width="547" height="171" rx="85.5" fill="#b8b5ff"/><circle cx="818.5" cy="767.5" r="85.5" fill="#b8b5ff"/></svg><span class="home-brand">WorkNest</span></a>
+    <a class="home-link" href="./" title="All projects" aria-label="All projects"><img class="home-logo" src="worknest-mark.svg" alt=""><span class="home-brand">WorkNest</span></a>
     <span class="spacer"></span>
   </div>
 
 
   <section class="chart-panel">
-    <!-- The project's name (click to rename; it heads saved images), the dot with
-         its colour on All projects (click to choose one), and where it's kept -->
-    <div class="project-title">
-      <h1 id="projectName" contenteditable="plaintext-only" spellcheck="false" title="Click to rename the project"></h1>
-      <div class="menu-wrap project-dot-wrap">
-        <button type="button" id="colorBtn" class="project-dot" aria-haspopup="dialog" aria-expanded="false" aria-controls="colorPop"></button>
-        <div class="menu color-pop" id="colorPop" role="dialog" aria-label="The project's colour" hidden>
-          <p class="color-pop-head">Colour on All projects</p>
-          <div class="color-swatches"><button type="button" data-color="#ff6b4a" style="--c:#ff6b4a" aria-label="#ff6b4a" title="#ff6b4a"></button><button type="button" data-color="#ffc145" style="--c:#ffc145" aria-label="#ffc145" title="#ffc145"></button><button type="button" data-color="#b8b5ff" style="--c:#b8b5ff" aria-label="#b8b5ff" title="#b8b5ff"></button><button type="button" data-color="#3fb6a8" style="--c:#3fb6a8" aria-label="#3fb6a8" title="#3fb6a8"></button><button type="button" data-color="#4f8ff7" style="--c:#4f8ff7" aria-label="#4f8ff7" title="#4f8ff7"></button><button type="button" data-color="#f06fa8" style="--c:#f06fa8" aria-label="#f06fa8" title="#f06fa8"></button><button type="button" data-color="#6cc070" style="--c:#6cc070" aria-label="#6cc070" title="#6cc070"></button><button type="button" data-color="#8a8fa8" style="--c:#8a8fa8" aria-label="#8a8fa8" title="#8a8fa8"></button></div>
-          <div class="color-custom">
-            <input type="color" id="colorNative" title="Pick any colour" aria-label="Pick any colour">
-            <input id="colorHex" maxlength="7" spellcheck="false" autocomplete="off" placeholder="#4f8ff7" aria-label="Colour as a hex code" title="A hex code, like #4f8ff7">
+    <!-- The edit bar: the project, as its chip (its name: it heads saved images;
+         click the chip to go back to All projects), the dot with its colour on All
+         projects, where it's kept, and the edit buttons -->
+    <div class="project-title edit-bar" data-drop="edit">
+      <button type="button" id="sideToggle" class="side-toggle" aria-controls="sideNav" aria-expanded="false" title="Show your projects" aria-label="Show your projects"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 4.5v15" stroke="currentColor" stroke-width="1.8"/></svg></button>
+      <a class="crumb-home" href="./" title="All projects" aria-label="WorkNest: all projects"><img class="crumb-mark" src="icon.svg" alt="" width="26" height="26"><span class="crumb-word"><img class="logo-light" src="worknest-logo-stacked.svg" alt="WorkNest" height="32"><img class="logo-dark" src="worknest-logo-stacked-white.svg" alt="" height="32"></span></a><span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="pick on edit-chip" role="button" tabindex="0"><h1 id="projectName" spellcheck="false"></h1>
+        <div class="menu-wrap project-dot-wrap">
+          <button type="button" id="colorBtn" class="project-dot" aria-haspopup="dialog" aria-expanded="false" aria-controls="colorPop"></button>
+          <div class="menu color-pop" id="colorPop" role="dialog" aria-label="The project's colour" hidden>
+            <p class="color-pop-head">Colour on All projects</p>
+            <div class="color-swatches"><button type="button" data-color="#ff6b4a" style="--c:#ff6b4a" aria-label="#ff6b4a" title="#ff6b4a"></button><button type="button" data-color="#ffc145" style="--c:#ffc145" aria-label="#ffc145" title="#ffc145"></button><button type="button" data-color="#b8b5ff" style="--c:#b8b5ff" aria-label="#b8b5ff" title="#b8b5ff"></button><button type="button" data-color="#3fb6a8" style="--c:#3fb6a8" aria-label="#3fb6a8" title="#3fb6a8"></button><button type="button" data-color="#4f8ff7" style="--c:#4f8ff7" aria-label="#4f8ff7" title="#4f8ff7"></button><button type="button" data-color="#f06fa8" style="--c:#f06fa8" aria-label="#f06fa8" title="#f06fa8"></button><button type="button" data-color="#6cc070" style="--c:#6cc070" aria-label="#6cc070" title="#6cc070"></button><button type="button" data-color="#8a8fa8" style="--c:#8a8fa8" aria-label="#8a8fa8" title="#8a8fa8"></button></div>
+            <div class="color-custom">
+              <input type="color" id="colorNative" title="Pick any colour" aria-label="Pick any colour">
+              <input id="colorHex" maxlength="7" spellcheck="false" autocomplete="off" placeholder="#4f8ff7" aria-label="Colour as a hex code" title="A hex code, like #4f8ff7">
+            </div>
+            <div class="error" id="colorError"></div>
+            <button type="button" id="colorReset" class="link-like">Use the label's colour</button>
           </div>
-          <div class="error" id="colorError"></div>
-          <button type="button" id="colorReset" class="link-like">Use the label's colour</button>
         </div>
-      </div>
+      </span>
       <span id="placeBadge" class="place-badge" hidden title="Saved in this browser only: not on your other devices, can't be shared, and lost if the browser's data is cleared"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 16v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> On this computer only</span>
       <!-- Someone else's project: whose it is, and that you can only view it (and comment) -->
       <span id="viewOnlyBadge" class="place-badge view-badge" hidden title="You can see the plan and write comments, but not change it"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg><span class="view-who"></span>View only</span>
-    </div>
-    <div class="toolbar">
-      <!-- On the left: Today and Overview. To show a quarter, month, week or day, click it in
-           the chart's date header; ‹ › at the header's ends step back / forward
-           (pinching zooms freely). On the right: undo / redo, Save, Export /
-           Import and + New task. -->
-      <button id="todayBtn" title="Go to today">Today</button>
-      <button id="overviewBtn" class="overview-btn" aria-pressed="false" title="Fit the whole project in view (click again to go back)">Overview</button>
       <span class="spacer"></span>
-      <!-- Undo / Redo, and Save (changes are a draft until saved) -->
+      <!-- Today and Fit for the chart below. To show a quarter, month, week or day, click
+           it in the chart's date header; ‹ › at the header's ends step back / forward. -->
+      <button id="todayBtn" title="Go to today">Today</button>
+      <button id="overviewBtn" class="overview-btn" aria-pressed="false" title="Zoom out until the whole project fits on the chart (click again to go back)">Zoom to fit</button>
+      <span class="bar-sep" aria-hidden="true"></span>
       <div class="seg history" role="group" aria-label="Undo and redo">
         <button id="undoBtn" class="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         <button id="redoBtn" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M15 14l5-5-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9H10a6 6 0 0 0 0 12h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
       </div>
       <button id="saveBtn" class="save-btn" title="Save your changes (Ctrl+S)">Save</button>
-      <!-- Saving and loading, as one joined group: an Export menu and Import -->
-      <div class="seg" role="group" aria-label="Save and load">
-        <div class="menu-wrap">
-          <button id="exportMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu">Export ▾</button>
-          <div class="menu" id="exportMenu" role="menu" hidden>
-            <!-- Share… (or Move online… for a project on this computer): only for its owner (collab.js) -->
-            <div id="shareItem" hidden>
-              <button role="menuitem" id="shareBtn" title="Share this project with a customer">Share…</button><hr></div>
-            <button role="menuitem" id="imageBtn" title="A picture of the whole chart">Image (.png)</button>
-            <button role="menuitem" id="calendarBtn" title="For Google Calendar, Outlook or Apple Calendar">Calendar (.ics)</button>
-            <button role="menuitem" id="exportBtn" title="The whole project, to import again later">JSON</button>
-          </div>
+      <div class="menu-wrap">
+        <button id="exportMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu">Export ▾</button>
+        <div class="menu" id="exportMenu" role="menu" hidden>
+          <!-- Share… (or Move online… for a project on this computer): only for its owner (collab.js) -->
+          <div id="shareItem" hidden>
+            <button role="menuitem" id="shareBtn" title="Share this project with a customer">Share…</button><hr></div>
+          <button role="menuitem" id="imageBtn" title="A picture of the whole chart">Image (.png)</button>
+          <button role="menuitem" id="calendarBtn" title="For Google Calendar, Outlook or Apple Calendar">Calendar (.ics)</button>
+          <button role="menuitem" id="exportBtn" title="The whole project, to import again later">JSON</button>
+          <hr>
+          <button role="menuitem" id="importBtn" title="Load a project from an exported JSON file">Import JSON…</button>
+          <button role="menuitem" id="pasteImportBtn" title="Dates copied from Google Sheets or Excel become a group of deadlines (you can also just paste them on the page)">Import Paste…</button>
         </div>
-        <button id="importBtn" title="Load a project from an exported JSON file">Import JSON</button>
       </div>
-      <button id="newTaskBtn" class="primary" title="Add a task (or drag across empty days in the chart)">+ New task</button>
       <!-- Sharing online (only with Firebase set up, see collab.js) -->
       <div class="menu-wrap" id="accountWrap" hidden>
         <button id="accountBtn" class="avatar" aria-haspopup="menu" aria-expanded="false" aria-controls="accountMenu"></button>
@@ -110,6 +121,18 @@
       <input id="importFile" type="file" accept="application/json" hidden>
     </div>
     <!-- The chart, with ‹ and › at the two ends of its date header (a period back / forward) -->
+    <!-- The sidebar (folded away until you open it with the button at the top left):
+         your projects, to switch between them, and your activity groups (presets.js), to drag onto the chart -->
+    <aside id="sideNav" class="side-nav" aria-label="Your projects and activity groups">
+      <div class="side-head">Your projects</div>
+      <nav id="sideProjects" class="side-projects"></nav>
+      <button type="button" id="sideNewProject" class="side-link side-new">+ New project</button>
+      <a class="side-link" href="./">All projects →</a>
+      <div class="side-presets-block">
+        <div class="side-head">Activity groups</div>
+        <div id="sidePresets" class="side-presets"></div>
+      </div>
+    </aside>
     <div class="chart-wrap">
       <div id="chart"></div>
       <button id="prevBtn" class="edge-nav prev" title="Previous" aria-label="Previous">‹</button>
@@ -164,6 +187,31 @@
   </form>
 </dialog>
 
+<!-- Import Paste: dates copied from Google Sheets or Excel become a group of deadlines (app.js) -->
+<!-- A preset's editor (presets.js) -->
+<dialog id="presetDialog" class="preset-dialog" aria-label="Activity group"><div id="presetBody" tabindex="-1"></div></dialog>
+
+<dialog id="pasteDialog" class="paste-dialog">
+  <form method="dialog">
+    <h2>Import Paste</h2>
+    <p class="paste-hint">Copy cells with dates in Google Sheets or Excel (a row or a column) and paste them here. Each date becomes a one-day deadline; text next to a date becomes its name.</p>
+    <textarea id="pasteText" rows="2" spellcheck="false" placeholder="18 Oct&#9;21 Oct&#9;22 Oct" aria-label="Pasted cells"></textarea>
+    <div class="paste-row">
+      <label class="field">Group <input id="pasteGroup" list="groupList" autocomplete="off"></label>
+      <!-- Only when the dates have no year: the year to put them in -->
+      <label class="field paste-year" hidden title="The pasted dates have no year: the year of the first one (later dates past New Year go on into the next year)">Starting year <select id="pasteYear"></select></label>
+    </div>
+    <ul id="pastePreview" class="paste-preview" hidden></ul>
+    <label class="paste-check"><input type="checkbox" id="pasteMilestone" checked> Show as milestones (◆)</label>
+    <p id="pasteNote" class="paste-note" aria-live="polite"></p>
+    <!-- "Import" comes first so Enter picks it; the row is shown reversed -->
+    <div class="actions reverse">
+      <button value="ok" class="primary" id="pasteOk">Import</button>
+      <button value="cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Links panel, opened from a task's or subtask's paperclip (filled by app.js) -->
 <div id="linkPanel" class="link-panel" role="dialog" aria-labelledby="linkTitle" hidden>
   <div class="link-head"><h2 id="linkTitle">Links</h2><button id="linkClose" title="Close">✕</button></div>
@@ -187,8 +235,9 @@
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-12.49"></script>
-<script src="combined.js?v=2026-10-12.49"></script>
-<script src="collab.js?v=2026-10-12.49"></script>
+<script src="app.js?v=2026-10-24.8"></script>
+<script src="combined.js?v=2026-10-24.8"></script>
+<script src="collab.js?v=2026-10-24.8"></script>
+<script src="presets.js?v=2026-10-24.8"></script>
 </body>
 </html>

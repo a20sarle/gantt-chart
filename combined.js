@@ -35,7 +35,7 @@ function drawCombined(el, projects, dayW, show) {
   const period = (cls, from, to, text, minPx, title = '') => {
     if (!levels.includes(cls)) return;
     const w = (to - from) * dayW;
-    head += `<div class="hspan ${cls}" style="left:${from * dayW}px;width:${w}px;top:${topOf(cls)}px"${title ? ` title="${title}"` : ''}><span>${w >= minPx ? text : ''}</span></div>`;
+    head += `<div class="hspan ${cls}" data-view="${cls}" data-date="${fmt(dateAt(from))}" style="left:${from * dayW}px;width:${w}px;top:${topOf(cls)}px"${title ? ` title="${title}"` : ''}><span>${w >= minPx ? text : ''}</span></div>`;
   };
   const dateAt = i => new Date(+min + i * DAY);
   let monthFrom = 0, quarterFrom = 0, weekFrom = 0;
@@ -47,7 +47,7 @@ function drawCombined(el, projects, dayW, show) {
       grid += `<div class="day${cls}" style="left:${i * dayW}px;width:${dayW}px"></div>`;
       if (levels.includes('days')) { // (with the weekday when there's room, as in the chart)
         const label = dayW >= 70 ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }) : d.getUTCDate();
-        head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}" style="left:${i * dayW}px;width:${dayW}px;top:${topOf('days')}px">${label}</div>`;
+        head += `<div class="day-label${dow === 0 || dow === 6 ? ' weekend' : ''}" data-view="day" data-date="${fmt(d)}" style="left:${i * dayW}px;width:${dayW}px;top:${topOf('days')}px">${label}</div>`;
       }
     }
     if (i === 0) continue;
@@ -131,6 +131,7 @@ function drawCombined(el, projects, dayW, show) {
   s.addEventListener('scroll', () => {
     hw.scrollLeft = s.scrollLeft;
     comboLeftDay = dayNumber(min) + s.scrollLeft / dayW;
+    window.onCombinedScroll?.(comboLeftDay); // (the editor below moves along)
     if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; tidyCombinedLabels(hw); }); }
   }, { passive: true });
 }
@@ -143,6 +144,14 @@ function tidyCombinedLabels(s) {
     const label = span.firstElementChild, r = span.getBoundingClientRect();
     label.style.visibility = r.right - Math.max(r.left, left) < label.offsetWidth ? 'hidden' : '';
   }
+}
+
+// Scrolls the timeline so `day` (a day number, may be fractional) is at its left edge
+function scrollCombinedToDay(el, day) {
+  const s = el.querySelector('.combo-scroll'), hw = el.querySelector('.combo-headwrap');
+  if (!s) return;
+  s.scrollLeft = (day - +s.dataset.min / DAY) * +s.dataset.dayw;
+  if (hw) hw.scrollLeft = s.scrollLeft;
 }
 
 // Back to today

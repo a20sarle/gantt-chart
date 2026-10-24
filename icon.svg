@@ -1,8 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect x="119" y="170" width="547" height="171" rx="85.5" fill="#ff6b4a"/>
-  <circle cx="818.5" cy="255.5" r="85.5" fill="#ff6b4a"/>
-  <circle cx="204.5" cy="511.5" r="85.5" fill="#ffc145"/>
-  <rect x="358" y="426" width="547" height="171" rx="85.5" fill="#ffc145"/>
-  <rect x="119" y="682" width="547" height="171" rx="85.5" fill="#b8b5ff"/>
-  <circle cx="818.5" cy="767.5" r="85.5" fill="#b8b5ff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 560" width="560" height="560" role="img" aria-label="WorkNest app icon">
+<title>WorkNest app icon</title>
+<rect width="560" height="560" rx="128" fill="#1F1D3A"/>
+<g transform="translate(153 145) scale(2.5962)">
+<line x1="11" y1="11" x2="87" y2="93" stroke="#F2C14E" stroke-width="22" stroke-linecap="round"/>
+<rect x="0" y="0" width="22" height="70" rx="11" fill="#E9715A"/>
+<circle cx="11" cy="93" r="11" fill="#E9715A"/>
+<circle cx="87" cy="11" r="11" fill="#B9B4F2"/>
+<rect x="76" y="34" width="22" height="70" rx="11" fill="#B9B4F2"/>
+</g>
 </svg>

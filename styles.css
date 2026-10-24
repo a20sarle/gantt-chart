@@ -5,11 +5,16 @@
     --on-accent: #fff; /* text on the accent colour */
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa0;
       --line: #2e2e33; --accent: #aaa7ff; --today: #ef6a5b; --weekend: #252529;
       --on-accent: #16182e;
     }
+  }
+  :root[data-theme="dark"] {
+      --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa0;
+      --line: #2e2e33; --accent: #aaa7ff; --today: #ef6a5b; --weekend: #252529;
+      --on-accent: #16182e;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -129,9 +134,9 @@
   .today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--today); z-index: 2; }
 
   /* Dialogs ("Move following tasks?", "New task") */
-  dialog { border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; box-shadow: 0 24px 60px rgba(27,31,59,.25); max-width: 460px; width: calc(100% - 32px);
+  dialog { border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; box-shadow: 0 24px 60px rgba(31,29,58,.25); max-width: 460px; width: calc(100% - 32px);
                  background: var(--panel); color: var(--text); box-shadow: 0 10px 40px rgba(0,0,0,.25); }
-  dialog::backdrop { background: rgba(27,31,59,.45); }
+  dialog::backdrop { background: rgba(31,29,58,.45); }
   dialog form { display: block; }
   dialog h2 { font-size: 17px; margin: 0 0 10px; }
   dialog p { margin: 0 0 10px; }
@@ -530,7 +535,7 @@
   .cloud-delete { color: var(--today); border-color: color-mix(in srgb, var(--today) 40%, var(--line)); }
 
   /* Viewing someone else's project: everything that would change the plan is hidden */
-  html.read-only #newTaskBtn, html.read-only #importBtn,
+  html.read-only #newTaskBtn, html.read-only #importBtn, html.read-only #pasteImportBtn, html.read-only #presetsBtn, html.read-only .preset-save,
   html.read-only .labels .row .reveal:not(.link-btn), html.read-only .link-btn:not(.has-links),
   html.read-only .link-dot, html.read-only .bar .handle, html.read-only .add-row span,
   html.read-only #linkForm, html.read-only .link-remove, html.read-only .turned-hint { display: none !important; }
@@ -621,7 +626,7 @@
   /* (while loading: just the logo and name, as a splash) */
   html.page-loading .start-tagline, html.page-loading .start-card, html.page-loading .start-foot { visibility: hidden; }
   html.page-projects .home { display: flex; }
-  html.page-start body, html.page-loading body { background: #1b1f3b; }
+  html.page-start body, html.page-loading body { background: #1F1D3A; }
 
   /* The start page: WorkNest's navy, the logo, and a light card to sign in */
   .start { min-height: 100vh; min-height: 100dvh; flex-direction: column; align-items: center; justify-content: center;
@@ -637,10 +642,10 @@
   .start-card .error { color: #c8402f; }
   .start-card button, .start-card input { font: inherit; border-radius: 8px; }
   .start-card input { background: #fff; color: #1d1d1f; border: 1px solid #d6d6d0; padding: 9px 10px; }
-  .start-card input:focus { outline: 2px solid #1b1f3b; outline-offset: -1px; }
+  .start-card input:focus { outline: 2px solid #1F1D3A; outline-offset: -1px; }
   .start-google { width: 100%; padding: 10px; background: #fff; color: #1d1d1f; border: 1px solid #d6d6d0; font-weight: 600; }
   .start-google:hover { background: #f5f5f2; }
-  .start-primary { padding: 9px 14px; background: #1b1f3b; border: 1px solid #1b1f3b; color: #fff; font-weight: 600; white-space: nowrap; }
+  .start-primary { padding: 9px 14px; background: #1F1D3A; border: 1px solid #1F1D3A; color: #fff; font-weight: 600; white-space: nowrap; }
   .start-primary:hover { background: #2a2f55; }
   .start-row { display: flex; gap: 8px; margin: 0; align-items: stretch; }
   .start-row input { flex: 1; min-width: 0; }
@@ -653,7 +658,7 @@
   /* ---- Your projects: a navy bar, a sidebar, and the projects as tiles ---- */
   .home { min-height: 100vh; min-height: 100dvh; flex-direction: column; background: var(--panel); } /* (white, like a project) */
   .home-bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px;
-              height: 64px; padding: 0 20px; background: #1b1f3b; color: #fff; }
+              height: 64px; padding: 0 20px; background: #1F1D3A; color: #fff; }
   .home-bar .spacer { flex: 1; }
   .brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 700; font-size: 19px;
            letter-spacing: -.01em; width: 228px; flex: none; }
@@ -670,8 +675,8 @@
 
   .home-body { flex: 1; display: flex; }
   .home-new { align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; margin: 0 0 18px 4px;
-              padding: 12px 22px 12px 16px; border: none; border-radius: 14px; background: #1b1f3b; color: #fff;
-              font-weight: 600; font-size: 15px; box-shadow: 0 2px 8px rgba(27,31,59,.25); }
+              padding: 12px 22px 12px 16px; border: none; border-radius: 14px; background: #1F1D3A; color: #fff;
+              font-weight: 600; font-size: 15px; box-shadow: 0 2px 8px rgba(31,29,58,.25); }
   .home-new span { font-size: 22px; line-height: 1; font-weight: 400; color: #ffc145; }
   .home-new:hover { background: #2a2f55; }
 
@@ -690,7 +695,7 @@
   .home-empty svg { width: 96px; height: auto; margin-bottom: 18px; }
   .home-empty h2 { font-size: 20px; margin: 0 0 6px; }
   .home-empty p { color: var(--muted); margin: 0 0 18px; }
-  .home-new-inline { padding: 10px 20px; border: none; border-radius: 12px; background: #1b1f3b; color: #fff; font-weight: 600; }
+  .home-new-inline { padding: 10px 20px; border: none; border-radius: 12px; background: #1F1D3A; color: #fff; font-weight: 600; }
 
   /* "Online or on this computer?" */
   .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; font-size: 13px; }
@@ -710,7 +715,7 @@
     .home-search { height: 40px; }
     .home-body { flex-direction: column; }
     .home-new { position: fixed; right: 16px; bottom: 20px; z-index: 20; margin: 0; padding: 14px 20px 14px 16px; border-radius: 18px;
-                box-shadow: 0 6px 20px rgba(27,31,59,.35); }
+                box-shadow: 0 6px 20px rgba(31,29,58,.35); }
     .home-main { padding: 14px 12px 96px; }
     .diff-grid { grid-template-columns: 1fr; }
   }
@@ -738,7 +743,7 @@
      logo (back to your projects), the project's name and your account; the chart
      gets the whole width below it */
   html.cloud main { max-width: none; padding: 0; }
-  html.cloud .app-head { flex: none; height: 58px; margin: 0; padding: 0 16px; gap: 12px; background: #1b1f3b; color: #fff; }
+  html.cloud .app-head { flex: none; height: 58px; margin: 0; padding: 0 16px; gap: 12px; background: #1F1D3A; color: #fff; }
   .app-head .spacer { flex: 1; }
   html.cloud .home-link:hover { background: rgba(255,255,255,.12); }
   html.cloud .home-logo { width: 28px; }
@@ -772,7 +777,7 @@
   .pick:hover { border-color: var(--accent); }
   .pick.dragging { opacity: .4; }
   .pick-ghost { position: fixed; z-index: 60; pointer-events: none; transform: translate(-50%, -50%) rotate(-2deg);
-                box-shadow: 0 8px 24px rgba(27,31,59,.3); cursor: grabbing; }
+                box-shadow: 0 8px 24px rgba(31,29,58,.3); cursor: grabbing; }
   /* The timeline while a chip is dragged: a place to drop it */
   .combo-chart { transition: box-shadow .15s; }
   .combo-chart.drop-ready { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
@@ -844,22 +849,22 @@
   .start-test:hover { background: #ecebf9; border-color: #4b49b8; }
   .start-testing span { font-size: 12px; color: #6e6e73; line-height: 1.4; }
   .test-bar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 10px;
-              max-width: calc(100vw - 24px); padding: 8px 10px 8px 16px; border-radius: 999px; background: #ffc145; color: #1b1f3b;
-              box-shadow: 0 6px 20px rgba(27,31,59,.3); font-size: 13px; }
+              max-width: calc(100vw - 24px); padding: 8px 10px 8px 16px; border-radius: 999px; background: #ffc145; color: #1F1D3A;
+              box-shadow: 0 6px 20px rgba(31,29,58,.3); font-size: 13px; }
   .test-bar b { flex: none; white-space: nowrap; }
   .test-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .test-bar button { flex: none; padding: 5px 12px; border: none; border-radius: 999px; background: rgba(27,31,59,.12); color: #1b1f3b; font-size: 13px; font-weight: 600; }
-  .test-bar button:hover { background: rgba(27,31,59,.22); }
+  .test-bar button { flex: none; padding: 5px 12px; border: none; border-radius: 999px; background: rgba(31,29,58,.12); color: #1F1D3A; font-size: 13px; font-weight: 600; }
+  .test-bar button:hover { background: rgba(31,29,58,.22); }
   @media (max-width: 760px) { .test-bar span { display: none; } .test-bar { bottom: 84px; flex-wrap: wrap; justify-content: center; border-radius: 16px; } }
 
   /* All projects: + New project next to the title; a project's ⋮ on its timeline row */
   .home-bar .home-new { flex: none; align-self: center; margin: 0; padding: 9px 18px 9px 14px; border-radius: 21px; gap: 8px;
-                        background: #ffc145; color: #1b1f3b; font-size: 14px; box-shadow: none; }
-  .home-bar .home-new span { color: #1b1f3b; font-size: 20px; }
+                        background: #ffc145; color: #1F1D3A; font-size: 14px; box-shadow: none; }
+  .home-bar .home-new span { color: #1F1D3A; font-size: 20px; }
   .home-bar .home-new:hover { background: #ffd06b; }
   @media (max-width: 760px) { /* (a phone: the round button at the bottom, as before) */
     .home-bar .home-new { position: fixed; right: 16px; bottom: 20px; z-index: 20; padding: 14px 20px 14px 16px; border-radius: 18px;
-                          background: #1b1f3b; color: #fff; font-size: 15px; box-shadow: 0 6px 20px rgba(27,31,59,.35); }
+                          background: #1F1D3A; color: #fff; font-size: 15px; box-shadow: 0 6px 20px rgba(31,29,58,.35); }
     .home-bar .home-new span { color: #ffc145; font-size: 22px; }
     .home-bar .home-new:hover { background: #2a2f55; }
   }
@@ -1038,7 +1043,6 @@
   .save-btn.dirty { color: var(--accent); border-color: var(--accent); font-weight: 600; }
   .save-btn.dirty:hover { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
   .save-btn.restored { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-  html.read-only .history, html.read-only .save-btn { display: none; }
 
   /* The date header: click a quarter, month, week or day to show it (the one shown is underlined) */
   .track > .head .hspan, .track > .head .day-label { cursor: pointer; }
@@ -1144,3 +1148,488 @@
                            font-variant-numeric: tabular-nums; }
   .labels .row.sub-row .sub-no { margin-right: -1px; }
   .sheet-sub-no { font-size: 12px; }
+
+  /* ---- All projects and the editor on one page ----
+     Every project's chip is in one of three places: "Not shown" (the shelf, with
+     + New project), the overview bar (drawn in the overview under it), or the edit
+     bar above the editor. While a project is open, All projects stays on top and
+     the editor fills the rest of the window; the overview scrolls with it. */
+  .shelf { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; margin: 0 0 12px;
+           border: 1px dashed var(--line); border-radius: 10px; }
+  .zone-label { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); margin-right: 4px; }
+  .zone-hint { font-size: 12px; color: var(--muted); }
+  .new-pick { margin-left: auto; padding: 4px 12px; border: 1px solid var(--accent); border-radius: 999px;
+              background: var(--panel); color: var(--accent); font-size: 13px; font-weight: 600; }
+  .new-pick:hover { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+  .home.guest .new-pick { display: none; }
+  .overview { margin-bottom: 4px; }
+  .overview-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 7px 10px; margin-bottom: 8px;
+                  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+  .overview-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ov-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: none; background: none;
+               color: var(--text); font-size: 14px; font-weight: 700; }
+  .ov-toggle .chev { color: var(--muted); }
+  .overview.collapsed .combo-chart { display: none; }
+  .overview.collapsed .overview-bar { margin-bottom: 0; }
+  .edit-slot { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 80px; margin-top: 18px;
+               border: 1.5px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 14px; }
+  /* While a chip is dragged, the places it can go light up */
+  [data-drop].drop-ready { outline: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+  [data-drop].drop-over { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+  .shelf .pick, .overview-chips .pick, .edit-chip { cursor: pointer; }
+  .pick-ghost { padding: 3px 12px; }
+  /* The edit bar: "Editing", the project's chip (its name), its colour dot, where it's kept, and the edit buttons */
+  .project-title.edit-bar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 0 0 10px;
+                            padding: 7px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+  .edit-bar .spacer { flex: 1; }
+  .edit-chip { padding: 3px 14px; border: 1px solid var(--label, var(--line)); }
+  .edit-chip h1 { margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+  .edit-chip h1[contenteditable="plaintext-only"] { cursor: text; outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+  .edit-bar .project-dot { width: 14px; height: 14px; }
+  #projectName:hover, html.cloud #projectName:hover { background: none; }
+  /* Without accounts (one project in the browser): just the name, Today and Fit */
+  html:not(.cloud) .edit-label { display: none; }
+  html:not(.cloud) .edit-chip { padding: 0; border: none; background: none; cursor: auto; }
+  html:not(.cloud) .edit-chip h1 { font-size: 22px; max-width: none; cursor: text; }
+  html:not(.cloud) .project-title.edit-bar { background: none; border: none; padding: 0; margin: 4px 0 12px; }
+  html.cloud .view-toolbar { display: none; } /* (Today and Fit are in the edit bar) */
+  html.cloud .app-head { display: none; }     /* (the navy bar of All projects is on top) */
+  /* A project's own page: the same navy bar (the logo goes back to All projects),
+     then the editor, filling the rest of the window */
+  html.cloud.page-app .home { display: flex; min-height: 0; }
+  html.cloud.page-app .home-body, html.cloud.page-app .home-search { display: none; }
+  html.cloud.page-app main { height: calc(100vh - 64px); height: calc(100dvh - 64px); min-height: 420px;
+                             max-width: 1400px; margin: 0 auto; padding: 0 12px 12px; min-width: 0; width: 100%; }
+  html.cloud.page-app .chart-panel { padding-top: 18px; }
+  .edit-bar #todayBtn, .edit-bar #overviewBtn { padding: 5px 12px; }
+  .edit-bar #overviewBtn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  @media (max-width: 760px) {
+    html.cloud.page-app main { height: calc(100vh - 58px); height: calc(100dvh - 58px); padding: 0 4px 8px; }
+  }
+  @media (max-width: 640px) { .edit-chip h1 { max-width: 50vw; } }
+
+  /* Today and Fit at the right of the overview bar */
+  .overview-bar .spacer { flex: 1; }
+  /* Today and Zoom to fit: on top of the timeline, joined to it (not with the chips) */
+  .ov-tools { display: flex; gap: 6px; align-items: center; padding: 6px 0 8px; }
+  .ov-tools button { padding: 4px 12px; font-size: 13px; }
+  .ov-tools .ov-fit.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .overview.collapsed .ov-tools { display: none; }
+
+  /* The pen (or eye) on a chip: opens the project in the editor */
+  .pick .pick-edit { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+                     margin: -2px -6px -2px 2px; padding: 0; border: none; border-radius: 50%; background: none; color: var(--text); opacity: .55; }
+  .pick .pick-edit:hover { opacity: 1; background: color-mix(in srgb, var(--label) 50%, var(--panel)); }
+  .shelf .pick .pick-edit:hover { background: var(--weekend); }
+
+  /* + New project right after the chips in the overview bar */
+  .overview-chips .new-pick { margin-left: 4px; padding: 3px 12px; }
+
+  /* The colour dot inside the project's chip (click it to choose the colour) */
+  .edit-chip { display: inline-flex; align-items: center; gap: 8px; max-width: none; overflow: visible; }
+  .edit-chip .project-dot { width: 12px; height: 12px; box-shadow: 0 0 0 2px var(--panel); }
+  .edit-chip .project-dot:hover, .edit-chip .project-dot[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+  .edit-chip .color-pop { cursor: auto; font-weight: 400; }
+
+  /* ---- The task sheet (drawSheet): a strip in the group's colour, the done circle and
+     the name, the details as chips (each opening a small picker), the subtasks, and
+     the comments in a grey area at the bottom ---- */
+  #sheetBody { padding: 0 20px; }
+  .sheet-strip { height: 4px; margin: 0 -20px; background: var(--bar); }
+  .sheet-head { position: relative; gap: 10px; margin: 0; padding: 14px 0 0; border-left: none; }
+  .sheet-name, .sheet-title { flex: 1; min-width: 0; margin-left: -6px; padding: 3px 6px; font-size: 19px; font-weight: 700; }
+  .sheet-icon, .sheet-head .sheet-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+                padding: 0; border: none; border-radius: 8px; background: none; color: var(--muted); font-size: 15px; }
+  .sheet-icon:hover, .sheet-icon[aria-expanded="true"] { background: var(--weekend); color: var(--text); }
+  .sheet-done-btn { flex: none; width: 22px; height: 22px; padding: 0; border: 2px solid var(--bar); border-radius: 50%;
+                    background: var(--panel); color: #fff; font-size: 12px; font-weight: 800; line-height: 18px; text-align: center; }
+  .sheet-done-btn:hover { background: color-mix(in srgb, var(--bar) 22%, var(--panel)); }
+  .sheet-done-btn.checked, .sheet-done-btn.checked:hover { background: var(--bar); }
+  .sheet-ring { flex: none; position: relative; width: 22px; height: 22px; border-radius: 50%;
+                background: conic-gradient(var(--bar) calc(var(--pct) * 1%), color-mix(in srgb, var(--bar) 30%, var(--panel)) 0); }
+  .sheet-ring::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--panel); }
+  .sheet-head .sub-tick { width: 22px; height: 22px; font-size: 12px; line-height: 18px; }
+
+  .sheet-chips { position: relative; display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0 32px; }
+  .sheet-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px;
+                border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--text);
+                font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+  button.sheet-chip:hover, label.sheet-chip:hover, .sheet-chip[aria-expanded="true"] { border-color: color-mix(in srgb, var(--text) 28%, var(--line)); background: var(--bg); }
+  .sheet-chip svg { flex: none; color: var(--muted); }
+  .sheet-chip.empty, .sheet-chip.dashed { color: var(--muted); }
+  .sheet-chip.dashed { border-style: dashed; }
+  span.sheet-chip { cursor: default; }
+  .sheet-muted { color: var(--muted); font-weight: 400; }
+  .sheet-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--bar); }
+  .sheet-group-chip input { width: auto; min-width: 0; padding: 0; border: none; border-radius: 0; background: none;
+                            color: inherit; font: inherit; font-size: 13px; outline: none; }
+  .sheet-group-chip:focus-within, .sheet-ms-chip:focus-within { border-color: var(--accent); }
+  .sheet-ms-chip select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .sheet-link-chip a { max-width: 180px; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
+  .sheet-link-chip .sheet-link-del { padding: 0 0 0 2px; font-size: 11px; }
+  .sheet-pop { position: absolute; z-index: 5; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 10px 12px;
+               border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, .14); }
+  .sheet-pop label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .sheet-pop input[type=date] { font-size: 14px; }
+  .sheet-pop .error { flex-basis: 100%; margin: 0; }
+  .sheet-pop .error:empty { display: none; }
+  .sheet-link-pop { width: min(380px, 100%); }
+  .sheet-link-pop form { flex: 1; }
+  .sheet-more-pop { top: calc(100% + 4px); right: 0; padding: 4px; }
+  .sheet-more-pop .sheet-delete { border: none; background: none; padding: 7px 14px; border-radius: 6px; color: var(--today); }
+  .sheet-more-pop .sheet-delete:hover { background: color-mix(in srgb, var(--today) 10%, var(--panel)); }
+
+  #sheetBody h3 { margin: 12px 0 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  #sheetBody h3.sheet-sec { margin-top: 22px; }
+  .sheet-progress { height: 4px; margin: 0 0 6px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--bar) 20%, var(--panel)); }
+  .sheet-progress span { display: block; height: 100%; border-radius: 2px; background: var(--bar); }
+  .sheet-subs { margin: 0; }
+  .sheet-subs > li { border-bottom: none; }
+  .sheet-sub-row { gap: 8px; margin: 0 -8px; padding: 1px 8px; border-radius: 8px; }
+  .sheet-sub-row:hover, .sheet-sub-row:focus-within { background: var(--bg); }
+  .sheet-sub-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--bar); }
+  .sheet-sub-row .sheet-sub-links:not(.has-links):not(.open), .sheet-sub-row .sheet-sub-del { opacity: 0; }
+  .sheet-sub-row:hover .sheet-sub-links, .sheet-sub-row:hover .sheet-sub-del,
+  .sheet-sub-row:focus-within .sheet-sub-links, .sheet-sub-row:focus-within .sheet-sub-del { opacity: 1; }
+  @media (hover: none) { .sheet-sub-row .sheet-sub-links, .sheet-sub-row .sheet-sub-del { opacity: 1 !important; } }
+  .sheet-adder { display: inline-flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 13px; }
+  .sheet-add-sub { margin: 4px 0; }
+  .sheet-none { margin: 0; }
+  .sheet-ro-note { margin: 14px 0 0; }
+
+  /* The comments: a grey area at the bottom, the write box one rounded field */
+  .sheet-thread-slot { margin: 18px -20px 0; padding: 14px 20px 16px; border-top: 1px solid var(--line); background: var(--bg); }
+  .sheet-thread-slot .thread h3 { margin-top: 0; }
+  .sheet-thread-slot .cm:not(.mine) .cm-bubble { background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
+  .sheet-thread-slot .thread.online .cm-form { display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+                                               padding: 4px 4px 4px 14px; border-radius: 20px; background: var(--panel); }
+  .sheet-thread-slot .cm-previews { flex-basis: 100%; }
+  .sheet-thread-slot .cm-previews:not(:empty) { padding-top: 6px; }
+  .sheet-thread-slot .cm-form textarea { flex: 1; min-width: 0; padding: 6px 0; line-height: 1.4; }
+  .sheet-thread-slot .cm-actions { margin: 0; gap: 2px; }
+  .sheet-thread-slot .cm-add-image { width: 32px; height: 32px; justify-content: center; padding: 0; border-radius: 50%; }
+  .sheet-thread-slot .cm-add-image:hover { background: var(--weekend); }
+  .sheet-thread-slot .cm-status { flex: none; }
+  .sheet-thread-slot .cm-send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+  @media (max-width: 480px) { .sheet-chips { margin-left: 0; } }
+  label.sheet-chip { flex-direction: row; gap: 6px; }
+  .sheet-thread-slot .cm-form textarea { min-height: 0; width: auto; }
+  .sheet-thread-slot .thread { margin: 0; padding: 0; border: none; }
+  @media (min-width: 641px) { dialog.sheet { width: min(560px, calc(100vw - 32px)); max-width: 560px; } }
+  .sheet-group-chip input::-webkit-calendar-picker-indicator { display: none !important; }
+
+  /* The sheet scrolls inside its rounded corners, with a very thin scrollbar */
+  dialog.sheet { overflow: hidden; }
+  dialog.sheet[open] { display: flex; flex-direction: column; }
+  #sheetBody { flex: 1 1 auto; min-height: 0; max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; }
+  #sheetBody::-webkit-scrollbar { width: 4px; }
+  #sheetBody::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+  #sheetBody::-webkit-scrollbar-thumb { border-radius: 2px; background: color-mix(in srgb, var(--text) 22%, transparent); }
+  #sheetBody::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 40%, transparent); }
+  @supports not selector(::-webkit-scrollbar) {
+    #sheetBody { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transparent; }
+  }
+
+  /* The edit bar is laid out the same when you can only view the project: the same
+     buttons in the same places (Undo, Redo and Save greyed out), on one line; the
+     badges are short ("View only", whose it is in its tooltip) */
+  .view-badge .view-who { display: none; }
+  html.read-only .history button:disabled, html.read-only .save-btn:disabled { opacity: .45; cursor: not-allowed; }
+  @media (min-width: 641px) {
+    .project-title.edit-bar { flex-wrap: nowrap; }
+    .edit-bar .edit-chip { flex: 0 1 auto; min-width: 0; }
+    .edit-bar .edit-chip h1 { min-width: 0; }
+    .edit-bar > button, .edit-bar > .seg, .edit-bar > .menu-wrap { flex: none; }
+  }
+  @media (min-width: 641px) and (max-width: 900px) {
+    .project-title .place-badge { font-size: 0; gap: 0; padding: 3px 6px; } /* (just the icon; the words are in its tooltip) */
+  }
+
+  /* Import Paste */
+  .paste-dialog { max-width: 520px; }
+  .paste-hint { font-size: 13px; color: var(--muted); }
+  #pasteText { display: block; width: 100%; margin: 0 0 14px; resize: vertical; font: 13px/1.5 ui-monospace, Consolas, monospace; tab-size: 12; }
+  .paste-preview { list-style: none; margin: -6px 0 12px; padding: 0; max-height: min(40vh, 320px); overflow-y: auto;
+                   border: 1px solid var(--line); border-radius: 10px; }
+  .paste-preview li { display: flex; align-items: center; gap: 10px; padding: 4px 10px; border-bottom: 1px solid var(--line); }
+  .paste-preview li:last-child { border-bottom: none; }
+  .paste-preview input[type=checkbox] { flex: none; width: 16px; height: 16px; }
+  .paste-name { flex: 1; min-width: 0; padding: 4px 6px; border-color: transparent; background: transparent; }
+  .paste-name:hover { border-color: var(--line); }
+  .paste-name:focus { border-color: var(--accent); background: var(--bg); }
+  .paste-when { flex: none; font-size: 13px; color: var(--muted); }
+  .paste-check { flex-direction: row; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13px; color: var(--text); }
+  .paste-note { font-size: 13px; color: var(--muted); min-height: 1em; }
+  .paste-note b { color: var(--text); }
+  .paste-row { display: flex; gap: 12px; }
+  .paste-row .field:first-child { flex: 1; min-width: 0; }
+  .paste-year[hidden] { display: none; }
+  .paste-year select { min-width: 96px; }
+
+  /* ---- Presets (presets.js) ---- */
+  .edit-bar #presetsBtn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; }
+  .edit-bar #presetsBtn[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); border-color: var(--accent); color: var(--accent); }
+  .preset-shelf { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 10px; padding: 8px 10px;
+                  border: 1px dashed var(--line); border-radius: 10px; background: var(--bg); }
+  .preset-shelf[hidden] { display: none; }
+  .preset-hint { font-size: 12px; color: var(--muted); margin-right: 4px; }
+  .preset-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 8px; border-radius: 999px;
+                 border: 1px solid var(--c, var(--line)); background: color-mix(in srgb, var(--c, var(--line)) 14%, var(--panel));
+                 color: var(--text); font-size: 13px; font-weight: 600; cursor: grab; touch-action: none; user-select: none; }
+  .preset-chip:hover { background: color-mix(in srgb, var(--c, var(--line)) 24%, var(--panel)); }
+  .preset-chip svg { color: color-mix(in srgb, var(--c) 70%, var(--text)); }
+  .preset-chip small { font-size: 11px; font-weight: 700; color: var(--muted); }
+  .preset-chip.preset-new { border-style: dashed; border-color: var(--muted); background: none; color: var(--muted); padding: 0 12px; cursor: pointer; }
+  html.preset-dragging, html.preset-dragging * { cursor: grabbing !important; user-select: none; }
+  .preset-ghost { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+  .preset-ghost[hidden] { display: none; }
+  .preset-ghost > div { position: fixed; }
+  .pg-line { width: 2px; background: var(--c); }
+  .pg-label, .pg-chip { padding: 3px 9px; border-radius: 6px; background: var(--c); color: var(--fg); font-size: 12px; font-weight: 700; white-space: nowrap;
+                        box-shadow: 0 4px 14px rgba(0, 0, 0, .18); }
+  .pg-chip small { font-weight: 400; opacity: .85; margin-left: 4px; }
+  .pg-bar { height: 20px; padding: 0 6px; border-radius: 5px; border: 1.5px dashed var(--c); background: color-mix(in srgb, var(--c) 30%, var(--panel));
+            color: var(--text); font-size: 11px; font-weight: 600; line-height: 17px; white-space: nowrap; overflow: visible; }
+  .pg-bar.key { border-style: solid; background: color-mix(in srgb, var(--c) 55%, var(--panel)); }
+  /* "Save as preset" on a group (when you point at it) */
+  .labels .preset-save { margin-left: auto; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+                         padding: 0; border: none; border-radius: 6px; background: none; color: var(--muted); opacity: 0; }
+  .labels .row:hover .preset-save, .labels .preset-save:focus-visible { opacity: 1; }
+  .labels .preset-save:hover { background: var(--weekend); color: var(--text); }
+  @media (hover: none) { .labels .preset-save { opacity: .7; } }
+  /* The editor */
+  dialog.preset-dialog { padding: 0; width: min(600px, calc(100vw - 24px)); max-width: 600px; max-height: 88vh; overflow: hidden; }
+  dialog.preset-dialog[open] { display: flex; flex-direction: column; }
+  #presetBody { padding: 16px 20px 18px; overflow-y: auto; border-top: 4px solid var(--c); }
+  #presetBody:focus { outline: none; }
+  .pe-head { display: flex; align-items: center; gap: 10px; }
+  .pe-dot { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--c); }
+  .pe-title { flex: 1; min-width: 0; margin-left: -6px; padding: 3px 6px; font-size: 19px; font-weight: 700; border-color: transparent; background: transparent; }
+  .pe-title:hover { border-color: var(--line); }
+  .pe-title:focus { border-color: var(--accent); background: var(--bg); }
+  .pe-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+  .pe-colors { display: flex; gap: 6px; margin: 10px 0 12px 24px; }
+  .pe-color { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 2px solid var(--panel); background: var(--c); box-shadow: 0 0 0 1px var(--line); }
+  .pe-color.on { box-shadow: 0 0 0 2px var(--text); }
+  .pe-items { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .pe-items li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .pe-items li.is-key { background: color-mix(in srgb, var(--c) 9%, var(--panel)); margin: 0 -8px; padding: 5px 8px; }
+  .pe-key { flex: none; width: 16px; height: 16px; accent-color: var(--c); }
+  .pe-name { flex: 1; min-width: 0; padding: 4px 6px; border-color: transparent; background: transparent; font-weight: 600; }
+  .pe-name:hover, .pe-items input[type=number]:hover, .pe-items select:hover { border-color: var(--line); }
+  .pe-name:focus { border-color: var(--accent); background: var(--bg); }
+  .pe-keytext { flex: none; font-size: 12px; font-weight: 700; color: color-mix(in srgb, var(--c) 70%, var(--text)); }
+  .pe-when, .pe-len { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+  .pe-items input[type=number] { width: 52px; padding: 3px 4px; font-size: 13px; text-align: right; }
+  .pe-items select { padding: 3px 4px; font-size: 13px; }
+  .pe-ms, .pe-del { flex: none; width: 26px; height: 26px; padding: 0; border: none; border-radius: 6px; background: none; color: var(--muted); }
+  .pe-ms:hover, .pe-del:hover:not(:disabled) { background: var(--weekend); color: var(--text); }
+  .pe-ms.on { color: var(--c); }
+  .pe-del:disabled { opacity: .3; }
+  .pe-add { display: block; margin: 4px 0 0; }
+  .pe-place { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+  .pe-place label { flex: 1; min-width: 220px; font-size: 12px; }
+  .pe-error:empty { display: none; }
+  .pe-actions { display: flex; align-items: center; margin-top: 14px; }
+  .pe-actions .spacer { flex: 1; }
+  .pe-delete { color: var(--today); border-color: color-mix(in srgb, var(--today) 40%, var(--line)); }
+  @media (max-width: 560px) {
+    .pe-items li { flex-wrap: wrap; }
+    .pe-name { flex-basis: calc(100% - 70px); }
+    .pe-when, .pe-len { margin-left: 24px; }
+  }
+  /* The project's name keeps some room in the edit bar; on narrower windows Presets is just its icon */
+  @media (min-width: 641px) { .edit-bar .edit-chip { min-width: 110px; } }
+  @media (max-width: 1100px) {
+    .edit-bar #presetsBtn { font-size: 0; gap: 0; padding: 5px 9px; }
+    .edit-bar #presetsBtn svg { width: 16px; height: 16px; }
+  }
+
+
+  /* ================= Soft Studio =================
+     A warm, light page (no cards: the chart lies right on it), a white top bar,
+     Nunito, one purple accent, pill-shaped buttons and soft pastel task bars
+     with their progress as a line along the bottom. The project's sidebar (your
+     projects and presets) is folded away until you open it. */
+  :root {
+    --bg: #FFFFFF; --panel: #FFFFFF; --text: #2B2940; --muted: #8D8A99;
+    --line: #EEEDF2; --accent: #1F1D3A; --weekend: rgba(185, 180, 242, .13); --on-accent: #fff;
+    --today-mark: #8F87E8; --soft: rgba(185, 180, 242, .22); /* (Today; selected things) */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1F1D3A; --panel: #262446; --text: #F1EFFA; --muted: #A4A0C2;
+      --line: #34315A; --accent: #B9B4F2; --weekend: rgba(185, 180, 242, .06); --on-accent: #1F1D3A;
+      --today-mark: #B9B4F2; --soft: rgba(185, 180, 242, .16);
+    }
+  }
+  :root[data-theme="dark"] {
+      --bg: #1F1D3A; --panel: #262446; --text: #F1EFFA; --muted: #A4A0C2;
+      --line: #34315A; --accent: #B9B4F2; --weekend: rgba(185, 180, 242, .06); --on-accent: #1F1D3A;
+      --today-mark: #B9B4F2; --soft: rgba(185, 180, 242, .16);
+  }
+  body { font-family: 'Nunito', system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); }
+  button, input, select, textarea { font-family: inherit; }
+  button { font-weight: 700; }
+  /* The chart lies on the page itself: everything in it painted "panel" is the page's colour */
+  .chart-wrap { --panel: var(--bg); }
+
+  /* ---- A project's page: the white top bar, then the sidebar and the chart ---- */
+  html.cloud.page-app .home { display: none; } /* (the top bar is the project's own) */
+  html.cloud.page-app main { max-width: none; padding: 0; height: 100vh; height: 100dvh; }
+  html.cloud.page-app .chart-panel { padding: 0; }
+  .project-title.edit-bar { margin: 0; padding: 10px 14px; gap: 8px; background: var(--panel); border: none;
+                            border-bottom: 1px solid var(--line); border-radius: 0; }
+  html.cloud .chart-wrap { margin-top: 12px; }
+  .side-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+                 border: none; border-radius: 999px; background: none; color: var(--muted); }
+  .side-toggle:hover { background: var(--bg); color: var(--text); }
+  .side-toggle[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); color: var(--accent); }
+  .crumb-home { flex: none; font-weight: 800; font-size: 15px; color: var(--text); text-decoration: none; }
+  .crumb-home:hover { color: var(--accent); }
+  .crumb-sep { flex: none; color: var(--muted); font-size: 16px; }
+  html:not(.cloud) .side-toggle, html:not(.cloud) .crumb-home, html:not(.cloud) .crumb-sep { display: none; }
+  /* the project's name: plain text with its colour dot (click the dot for the colour) */
+  .edit-bar .edit-chip, html.cloud .edit-bar .edit-chip { padding: 0; border: none; background: none; box-shadow: none; }
+  .edit-bar .edit-chip h1 { font-size: 17px; font-weight: 700; color: var(--text); }
+  .edit-bar .edit-chip .project-dot { width: 11px; height: 11px; }
+  .bar-sep { flex: none; width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+  /* pill-shaped buttons */
+  .edit-bar > button:not(.side-toggle), .edit-bar .menu-wrap > button:not(.avatar):not(.project-dot), .edit-bar .seg { border-radius: 999px; }
+  .edit-bar > button:not(.side-toggle), .edit-bar .menu-wrap > button:not(.avatar):not(.project-dot) { padding: 5px 14px; font-size: 13px; background: var(--panel); }
+  .edit-bar .edit-chip h1 { cursor: text; border-radius: 4px; padding: 1px 4px; margin-left: -4px; }
+  html:not(.read-only) .edit-bar .edit-chip h1:hover { background: var(--bg); }
+  html.read-only .edit-bar .edit-chip h1 { cursor: default; }
+  .edit-bar .seg { overflow: hidden; border: 1px solid var(--line); }
+  .edit-bar .seg button { border: none; border-radius: 0; margin: 0; padding: 5px 11px; background: var(--panel); }
+  .edit-bar .seg button + button { border-left: 1px solid var(--line); }
+  .edit-bar .save-btn.dirty { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .edit-bar .save-btn.dirty:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+  .edit-bar .avatar { width: 32px; height: 32px; margin-left: 4px; }
+  dialog .actions button, .sheet-foot button, .home-bar button:not(.avatar) { border-radius: 999px; }
+
+  /* ---- The sidebar ---- */
+  .side-nav { display: none; width: 220px; padding: 10px 8px 16px; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
+  html.cloud.side-open .side-nav { display: block; }
+  html.read-only .side-presets-block { display: none; }
+  .side-head { padding: 10px 10px 6px; font-size: 11.5px; font-weight: 800; color: var(--muted); }
+  .side-proj { display: flex; width: 100%; align-items: center; gap: 9px; padding: 7px 10px; border: none; border-radius: 4px; background: none;
+               color: var(--muted); font-size: 13.5px; font-weight: 600; text-align: left; text-decoration: none; }
+  .side-proj > i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--dot); }
+  .side-proj > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-proj > svg { flex: none; }
+  .side-proj > small { flex: none; font-size: 11px; color: var(--muted); }
+  .side-proj:hover { background: var(--bg); color: var(--text); }
+  .side-proj.on { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); color: var(--text); font-weight: 800; }
+  .side-link { display: block; width: 100%; padding: 7px 10px; border: none; border-radius: 4px; background: none; color: var(--muted);
+               font-size: 13px; font-weight: 700; text-align: left; text-decoration: none; }
+  .side-link:hover { background: var(--bg); color: var(--text); }
+  .side-link.side-new { color: var(--accent); font-weight: 800; }
+  .side-empty { margin: 0 10px 6px; font-size: 12px; color: var(--muted); }
+  .side-presets .preset-chip { height: auto; cursor: grab; touch-action: none; user-select: none; }
+  @media (min-width: 641px) {
+    html.cloud.page-app .chart-panel { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .chart-panel > .edit-bar { grid-column: 1 / -1; }
+    .chart-panel > .side-nav { grid-column: 1; grid-row: 2 / -1; }
+    .chart-panel > :not(.edit-bar):not(.side-nav) { grid-column: 2; min-width: 0; min-height: 0; }
+  }
+  @media (max-width: 640px) { /* on a phone: the sidebar slides over the page */
+    html.cloud.side-open .side-nav { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(280px, 82vw); box-shadow: 0 0 40px rgba(42, 37, 64, .25); }
+    .project-title.edit-bar { padding: 8px 10px; }
+  }
+
+  /* ---- The chart: soft pastel bars with rounded ends ---- */
+  .bar { border-radius: 11px; padding: 0 10px; background: color-mix(in srgb, var(--bar) 30%, transparent); color: var(--text); font-weight: 700; }
+  .bar:hover { filter: none; background: color-mix(in srgb, var(--bar) 42%, transparent); }
+  .bar.ms-start { padding-left: 18px; }
+  .bar.ms-end { padding-right: 18px; }
+  /* progress: a line along the bottom, from the left (the rounded end clips it) */
+  .bar .progress { top: 0; bottom: 0; border-radius: 11px 0 0 11px; background: linear-gradient(to top, var(--bar) 3px, transparent 3px); }
+  .bar.done { filter: none; opacity: .55; }
+  .bar.done .progress { display: none; }
+  .bar .handle::after { background: var(--text); }
+  .bar .diamond { border-radius: 3px; box-shadow: 0 2px 6px color-mix(in srgb, var(--bar) 45%, transparent); }
+  .group-bar { height: 4px; top: 16px; border-radius: 2px; opacity: .55; }
+  .today { background: var(--accent); }
+  /* Today in the date header: its date in a purple pill, wherever the date sits (any view) */
+  .day-label .today-pill { display: inline-block; padding: 0 7px; border-radius: 999px; background: var(--accent); color: var(--on-accent);
+                           font-weight: 800; line-height: 18px; white-space: nowrap; }
+
+  /* ---- All projects: the same white top bar ---- */
+  .home-bar { background: var(--panel); color: var(--text); border-bottom: 1px solid var(--line); }
+  .brand { color: var(--text); }
+  /* All projects lies on the page too (no boxes) */
+  .home, html.cloud .home-body { background: var(--bg); }
+  .home-main .combo-chart { --panel: var(--bg); }
+  .home-main .overview-bar { background: none; border-color: var(--line); }
+  .ov-tools button, .chart-tools button { border-radius: 999px; }
+  /* The phone's (turned) chart, in the same style */
+  .t-today { background: var(--accent); }
+  .t-bar { border-radius: 10px; background: color-mix(in srgb, var(--bar) 30%, transparent) !important; color: var(--text) !important; font-weight: 700; }
+  .t-bar.done { filter: none; }
+  html.cloud .turned-hint { margin: 8px 10px 6px; }
+  /* The project's name keeps room in the top bar; on narrower windows the buttons tighten up */
+  @media (min-width: 641px) { .edit-bar .edit-chip { min-width: 150px; } }
+  @media (max-width: 1000px) {
+    .edit-bar > button:not(.side-toggle), .edit-bar .menu-wrap > button:not(.avatar):not(.project-dot) { padding: 5px 10px; }
+    .edit-bar .seg button { padding: 5px 8px; }
+    .project-title.edit-bar { gap: 6px; }
+  }
+  .day-label.is-today { text-align: center; padding-left: 0; padding-right: 0; } /* (right above the today line) */
+  /* Activity groups: the key date, said in words */
+  .pe-help { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+  .pe-help b { color: var(--text); }
+  .pe-keytext { padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--c) 18%, var(--panel)); }
+  .pe-ms:disabled { cursor: default; opacity: 1; }
+  /* A group's colour dot: click it to change the group's colour */
+  .labels button.group-dot { padding: 0; border: none; width: 10px; height: 10px; min-width: 0; border-radius: 50%; background: var(--bar); cursor: pointer; }
+  button.group-dot:hover, button.group-dot:focus-visible { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); outline: none; }
+  .group-color-pop { position: fixed; z-index: 60; }
+
+  /* ---- The WorkNest logo ---- */
+  .start-title { margin: 0 0 14px; line-height: 0; }
+  .start-logo { width: 320px; max-width: 80vw; height: auto; margin: 0; }
+  .brand picture, .crumb-home picture { display: flex; }
+  .brand-word img { height: 36px; width: auto; display: block; }
+  .brand-mark { display: none; width: 32px; height: 32px; }
+  .crumb-home { display: inline-flex; align-items: center; }
+  .crumb-word img { height: 32px; width: auto; display: block; }
+  .crumb-mark { display: none; width: 26px; height: 26px; }
+  .home-empty .brand-logo { width: 56px; height: auto; }
+  .home-logo { width: 26px; height: auto; }
+  @media (max-width: 760px) { /* narrow: the app icon instead of the whole logo */
+    .brand-word, .crumb-word { display: none !important; }
+    .brand-mark, .crumb-mark { display: block; }
+  }
+
+  /* ---- B3 "Paper and lavender": white paper, the logo's navy for buttons, lavender
+     only where it means something (Today, weekends, what's selected) ---- */
+  .today, .t-today { background: var(--today-mark); }
+  .day-label .today-pill { background: var(--today-mark); color: #fff; }
+  .side-proj.on { background: var(--soft); }
+  .side-toggle[aria-expanded="true"] { background: var(--soft); color: var(--text); }
+  .hspan.shown, .day-label.shown { color: color-mix(in srgb, var(--today-mark) 80%, var(--text)); }
+  .bar { background: color-mix(in srgb, var(--bar) 26%, transparent); }
+  .bar:hover { background: color-mix(in srgb, var(--bar) 38%, transparent); }
+  .t-bar { background: color-mix(in srgb, var(--bar) 26%, transparent) !important; }
+  .group-bar { opacity: .7; }
+
+  /* ---- Light / Dark / Auto (the account menu; Auto follows the computer) ---- */
+  :root { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+  .logo-dark { display: none !important; }
+  :root[data-theme="dark"] .logo-light { display: none !important; }
+  :root[data-theme="dark"] .logo-dark { display: block !important; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .logo-light { display: none !important; }
+    :root:not([data-theme="light"]) .logo-dark { display: block !important; }
+  }
+  .brand-word, .crumb-word { display: flex; }
+  .acct-theme { padding: 6px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .acct-theme > span { display: block; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+  .acct-menu .theme-seg { display: flex; padding: 2px; border: 1px solid var(--line); border-radius: 999px; }
+  .acct-menu .theme-seg button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 8px;
+                                 border-radius: 999px; font-size: 12.5px; color: var(--muted); text-align: center; }
+  .acct-menu .theme-seg button.on { background: var(--accent); color: var(--on-accent); }
+  .acct-menu .theme-seg button.on:hover { background: var(--accent); }

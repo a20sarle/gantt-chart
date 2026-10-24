@@ -102,9 +102,9 @@ export async function listProjects(email) {
 
 // ---- Your labels
 export async function getMine(uid) { return load().users[uid] || {}; }
-export async function saveMine(uid, { labels, projectLabels }) {
+export async function saveMine(uid, { labels, projectLabels, presets }) {
   const db = load();
-  db.users[uid] = { labels, projectLabels };
+  db.users[uid] = { labels, projectLabels, presets: presets || [] };
   save(db);
 }
 

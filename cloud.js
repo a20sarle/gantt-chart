@@ -92,12 +92,13 @@ export async function listProjects(email) {
 }
 
 // ---- Your own settings (your labels) ----
-// users/{uid}: { labels: [{ id, name, color }], projectLabels: { '<kind>:<project id>': label id } }
+// users/{uid}: { labels: [{ id, name, color }], projectLabels: { '<kind>:<project id>': label id },
+//               presets: [...] (presets.js) }
 export async function getMine(uid) {
   const snap = await getDoc(doc(db, 'users', uid));
   return snap.exists() ? snap.data() : {};
 }
-export const saveMine = (uid, { labels, projectLabels }) => setDoc(doc(db, 'users', uid), { labels, projectLabels, updated: serverTimestamp() });
+export const saveMine = (uid, { labels, projectLabels, presets }) => setDoc(doc(db, 'users', uid), { labels, projectLabels, presets: presets || [], updated: serverTimestamp() });
 
 // ---- Comments ----
 // Calls onList(all of the project's comments, oldest first) now and on every change

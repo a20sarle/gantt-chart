@@ -54,12 +54,12 @@
     <p class="cm-local">Comments need an online project. <button type="button" class="link-like cm-move">Move it online</button> to talk about it with others.</p>
     <form class="cm-form">
       <div class="cm-previews"></div>
-      <textarea rows="2" placeholder="Write a comment…" aria-label="Write a comment"></textarea>
+      <textarea rows="1" placeholder="Write a comment…" aria-label="Write a comment"></textarea>
       <div class="cm-actions">
-        <button type="button" class="cm-add-image" title="Add images (you can also paste or drop them)">${IMAGE_ICON} Image</button>
+        <button type="button" class="cm-add-image" title="Add images (you can also paste or drop them)" aria-label="Add images">${IMAGE_ICON}</button>
         <input type="file" accept="image/*" multiple hidden>
         <span class="cm-status" aria-live="polite"></span>
-        <button class="primary cm-send">Send</button>
+        <button class="primary cm-send" title="Send (Ctrl+Enter)" aria-label="Send"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
     </form>`;
   const listEl = thread.querySelector('.cm-list');
@@ -77,6 +77,7 @@
     thread.classList.toggle('local', !!LOCAL_ID);
     if (!online() || !threadTask) return;
     const list = taskComments(threadTask);
+    thread.querySelector('h3').textContent = list.length ? `Comments · ${list.length}` : 'Comments';
     listEl.innerHTML = list.length ? list.map(commentHtml).join('')
       : '<li class="cm-empty">No comments yet.</li>';
     for (const btn of listEl.querySelectorAll('.cm-img')) {
@@ -240,7 +241,7 @@
   // 'loading' (until we know who you are) | 'start' | 'projects' | 'app'
   function showPage(name) {
     for (const p of ['loading', 'start', 'projects', 'app']) root.classList.toggle(`page-${p}`, p === name);
-    document.querySelector(name === 'projects' ? '.home-bar' : '.app-head')?.append(accountWrap);
+    document.querySelector(LOCAL_ID || ONLINE_ID ? '.edit-bar' : CLOUD ? '.home-bar' : '.app-head')?.append(accountWrap); // (the top bar: All projects', or the project's)
     if (name !== 'app') document.title = 'WorkNest';
   }
 
@@ -357,7 +358,7 @@
   // you share with don't see them): { labels: [{ id, name, color }],
   // projectLabels: { '<kind>:<project id>': label id } }. A project's colour in
   // the timeline is its label's, and projects are listed by label.
-  let mine = { labels: [], projectLabels: {} };
+  let mine = { labels: [], projectLabels: {}, presets: [] }; // (presets: presets.js)
   let labelsState = 'loading'; // 'loading' | 'ok' | 'error' (e.g. the database rules aren't updated yet)
   const LABEL_COLORS = ['#ff6b4a', '#ffc145', '#b8b5ff', '#3fb6a8', '#4f8ff7', '#f06fa8', '#6cc070', '#8a8fa8'];
   const NO_LABEL_COLOR = '#c9cad3';
@@ -384,8 +385,11 @@
       cloud.getMine(user.uid).then(d => { labelsState = 'ok'; return d || {}; }, err => { console.error(err); labelsState = 'error'; return {}; }),
     ]);
     homeOnline = list;
-    mine = { labels: Array.isArray(saved.labels) ? saved.labels : [], projectLabels: saved.projectLabels || {} };
+    mine = { labels: Array.isArray(saved.labels) ? saved.labels : [], projectLabels: saved.projectLabels || {},
+             presets: Array.isArray(saved.presets) ? saved.presets : [] };
     drawHome();
+    window.drawPresets?.(); // (your presets, for the presets shelf)
+    if (inEditor()) drawProjectColor(); // (the open project's label colour, for its dot and chip)
   }
 
   // All your projects (online, on this computer, shared with you), newest change first
@@ -399,12 +403,12 @@
     const q = searchEl.value.trim().toLowerCase();
     const everything = allProjects();
     const loading = homeOnline === null, failed = homeOnline === 'error';
-    const nothing = !loading && !failed && !everything.length;
+    const nothing = !loading && !failed && !everything.length && !OPEN_ID;
     // The title; the buttons are in a toolbar between the chips and the timeline
     const title = `<div class="home-titlebar"><h1 class="home-title">All projects</h1></div>`;
     if (nothing) {
       homeMain.innerHTML = title + `
-        <div class="home-empty">${document.querySelector('.brand-logo').outerHTML}
+        <div class="home-empty"><img class="brand-logo" src="worknest-mark.svg" alt="">
           <h2>Start your first project</h2>
           <p>Plan it as a timeline, then share it with your customer to talk it through.</p>
           <button type="button" class="home-new-inline">+ New project</button></div>`;
@@ -417,15 +421,20 @@
     drawCombo(everything, q, loading, failed);
   }
 
-  // ---- All projects in one timeline ----
-  // The projects that aren't on the timeline are chips in one row: drag one
-  // onto the timeline to see it there (its chip then leaves the row), click it
-  // to open it. The ones on it are drawn one under the other in the same chart
-  // (combined.js), each in its label's colour, with an icon for where it's kept,
-  // ✕ to take it off again and ⋮ for its menu. Which ones, and the zoom, are
-  // remembered.
+  // ---- All projects and the editor, on one page ----
+  // Every project has a chip in the overview bar (with + New project after them):
+  // filled in its colour when it's shown in the overview under it (combined.js),
+  // dashed when it isn't. Click a chip to show or hide it. Its pen (an eye for
+  // a project shared with you) opens the project on its own page (?p= / ?local=),
+  // where its chip is the title of the edit bar: click it to come back. Right-click / press and
+  // hold a chip for its menu. All projects looks the same whether a project is open
+  // or not; the open project's editor is under it, and they scroll together.
   const PICK_KEY = pref('simple-gantt-combined'), VIEW_KEY_COMBO = pref('simple-gantt-combined-view');
+  const OV_KEY = pref('worknest-overview-collapsed');
+  const OPEN_ID = LOCAL_ID || ONLINE_ID;              // (the project open in the editor, if any)
+  const inEditor = () => root.classList.contains('page-app');
   let comboList = []; // the projects as listed (label order)
+  let ovProjects = []; // the projects drawn in the overview
   // ‹ [Week ▾] ›, as in a project: Day / Week / Month / Quarter show exactly that
   // period across the timeline, ‹ › step one period, Overview fits all the
   // projects on it (pick it again to go back), Today goes to today's period
@@ -437,9 +446,14 @@
   const picked = () => { try { const v = JSON.parse(read(PICK_KEY)); return Array.isArray(v) ? new Set(v) : null; } catch { return null; } };
   const isOn = p => { const chosen = picked(); return !chosen || chosen.has(keyOf(p)); }; // (nothing chosen yet: all)
   const hrefOf = p => `${p.kind === 'local' ? '?local=' : '?p='}${encodeURIComponent(p.id)}`;
-  const chipTitle = p => `${p.name || 'Untitled'}${labelOf(p) ? ` (${labelOf(p).name})` : ''}\n${isOn(p)
-    ? 'On the timeline, in this colour. Click to take it off the timeline.' : 'Click (or drag it onto the timeline) to show it there.'} ${p.kind === 'shared'
-    ? 'The eye opens it (shared with you: view only).' : 'The pen opens it for editing.'} Right-click or press and hold for more.`;
+  // The key of the open project's chip
+  const editKey = () => {
+    if (!OPEN_ID) return null;
+    const p = comboList.find(x => x.id === OPEN_ID && (LOCAL_ID ? x.kind === 'local' : x.kind !== 'local'));
+    return p ? keyOf(p) : `${LOCAL_ID ? 'local' : isOwner() ? 'online' : 'shared'}:${OPEN_ID}`;
+  };
+  const chipTitle = p => `${p.name || 'Untitled'}${labelOf(p) ? ` (${labelOf(p).name})` : ''}${p.kind === 'shared' ? ' (shared with you: view only)' : ''}\n${isOn(p)
+    ? 'In the overview. Click to hide it.' : 'Not in the overview. Click to show it there.'} The ${p.kind === 'shared' ? 'eye opens it (view only)' : 'pen opens it for editing'}. Right-click or press and hold for more.`;
   const PEN_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
   const EYE_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
   const NO_LABEL_BAR = '#9a9aa0'; // (a project without a label: grey, on its chip and its bars)
@@ -458,8 +472,8 @@
               <hr>
               <button type="button" role="menuitemcheckbox" data-cview="overview"${comboView === 'overview' ? ' class="active"' : ''} title="Fit all the projects on the timeline (pick again to go back)">Overview</button>
               <hr>
-              <button type="button" role="menuitem" data-pick="all">Show all projects</button>
-              <button type="button" role="menuitem" data-pick="none">Clear the timeline</button>
+              <button type="button" role="menuitem" data-pick="all">Show all in the overview</button>
+              <button type="button" role="menuitem" data-pick="none">Hide all</button>
             </div>
           </div>
           <button type="button" class="nav-arrow" data-step="1" title="Next ${comboView === 'overview' ? 'screen' : comboView}" aria-label="Next">›</button>
@@ -468,37 +482,62 @@
       </div>`;
   }
 
+  // The sidebar on a project's page: your projects (the open one highlighted), to switch
+  function drawSideNav() {
+    const box = document.getElementById('sideProjects');
+    if (!box) return;
+    const ek = editKey();
+    box.innerHTML = comboList.map(p => `<a class="side-proj${keyOf(p) === ek ? ' on' : ''}" href="${esc(hrefOf(p))}" style="--dot:${barColorOf(p)}"
+        ${keyOf(p) === ek ? 'aria-current="page"' : ''} title="${esc(p.name || 'Untitled')}${p.kind === 'shared' ? ' (shared with you: view only)' : p.kind === 'local' ? ' (on this computer only)' : ''}">
+        <i aria-hidden="true"></i><span>${esc(p.name || 'Untitled')}</span>${p.kind === 'shared' ? EYE_ICON : ''}</a>`).join('')
+      || '<p class="side-empty">Loading…</p>';
+  }
+  document.getElementById('sideNewProject')?.addEventListener('click', () => showCloud('newproject'));
+
   function drawCombo(everything, q, loading, failed) {
     const el = document.getElementById('combo');
     comboList = byLabel(everything);
-    // Every project has a chip (its name lives here, not on the timeline). Click
-    // it to show or hide the project on the timeline: shown, it's filled with the
-    // colour of its bars; hidden, a dashed outline. The pen opens the project (an
-    // eye instead for one shared with you, which you can only view).
-    const chips = comboList.filter(p => (p.name || '').toLowerCase().includes(q)).map(p => `
-      <span class="pick${isOn(p) ? ' on' : ''}" data-key="${esc(keyOf(p))}" style="--label:${barColorOf(p)}" title="${esc(chipTitle(p))}"
-        role="button" tabindex="0" aria-pressed="${isOn(p)}"><span>${esc(p.name || 'Untitled')}</span><a class="pick-edit" href="${hrefOf(p)}"
-        title="${p.kind === 'shared' ? 'View' : 'Edit'} ${esc(p.name || 'Untitled')}" aria-label="${p.kind === 'shared' ? 'View' : 'Edit'} ${esc(p.name || 'Untitled')}">${p.kind === 'shared' ? EYE_ICON : PEN_ICON}</a></span>`).join('')
-      || (comboList.length && !loading ? '<span class="pick-none">No projects match your search.</span>' : '');
-    // The chips, then a toolbar (‹ [Month ▾] › and Today on the left, + New project on the right), then the timeline
-    el.innerHTML = `${chips ? `<div class="combo-pick" aria-label="Your projects">${chips}</div>` : ''}
-      <div class="toolbar combo-toolbar">${comboNav()}<span class="spacer"></span><button type="button" id="newProjectBtn" class="primary">+ New project</button></div>
-      <div class="combo-chart"></div>`;
+    const ek = editKey(), match = p => (p.name || '').toLowerCase().includes(q);
+    const chip = p => `<span class="pick${isOn(p) ? ' on' : ''}" data-key="${esc(keyOf(p))}" style="--label:${barColorOf(p)}" title="${esc(chipTitle(p))}"
+      role="button" tabindex="0"><span>${esc(p.name || 'Untitled')}</span><button type="button" class="pick-edit" data-key="${esc(keyOf(p))}"
+      title="${p.kind === 'shared' ? 'View' : 'Edit'} ${esc(p.name || 'Untitled')}" aria-label="${p.kind === 'shared' ? 'View' : 'Edit'} ${esc(p.name || 'Untitled')}">${p.kind === 'shared' ? EYE_ICON : PEN_ICON}</button></span>`;
+    const others = comboList.filter(p => keyOf(p) !== ek);
+    const shown = others.filter(isOn);
+    const collapsed = read(OV_KEY) === '1';
+    el.innerHTML = `
+      <div class="overview${collapsed ? ' collapsed' : ''}" data-drop="overview">
+        <div class="overview-bar">
+          <button type="button" class="ov-toggle${collapsed ? ' shut' : ''}" aria-expanded="${!collapsed}" title="${collapsed ? 'Show' : 'Hide'} the overview"><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Overview</span></button>
+          <div class="overview-chips">${others.filter(match).map(chip).join('')
+            || `<span class="zone-hint">${loading ? '' : q && others.length ? 'No projects match your search.' : ''}</span>`}
+            <button type="button" id="newProjectBtn" class="new-pick">+ New project</button></div>
+        </div>
+        <!-- (the timeline's own buttons, right on top of it) -->
+        <div class="ov-tools" role="toolbar" aria-label="Timeline">
+          <button type="button" class="ov-today" title="Go to today's period on the timeline">Today</button>
+          <button type="button" class="ov-fit${comboView === 'overview' && !ovZoom ? ' active' : ''}" aria-pressed="${comboView === 'overview' && !ovZoom}"
+            title="Zoom out until every project shown fits on the timeline (click again to go back)">Zoom to fit</button>
+        </div>
+        <div class="combo-chart"></div>
+      </div>
+`;
+    drawEditChip();
+    drawSideNav();
     const chart = el.querySelector('.combo-chart');
+    ovProjects = shown.map(p => ({
+      key: keyOf(p), name: p.name || 'Untitled', color: barColorOf(p), label: labelOf(p)?.name || '',
+      tasks: p.data && Array.isArray(p.data.tasks) ? p.data.tasks : [], groupColors: (p.data && p.data.groupColors) || {},
+    }));
+    if (collapsed) return;
     if (loading || failed) {
       chart.innerHTML = `<p class="home-note">${loading ? 'Loading…' : 'Your online projects couldn\'t be loaded. Check your connection and reload the page.'}</p>`;
       return;
     }
-    const shown = comboList.filter(isOn); // (in label order)
-    if (!shown.length) { chart.innerHTML = '<p class="home-note combo-empty">Drag a project here to see it on the timeline. Click a project to open it.</p>'; return; }
-    const projects = shown.map(p => ({
-      key: keyOf(p), name: p.name || 'Untitled', color: barColorOf(p), label: labelOf(p)?.name || '',
-      tasks: p.data && Array.isArray(p.data.tasks) ? p.data.tasks : [], groupColors: (p.data && p.data.groupColors) || {},
-    }));
-    // The days to fit across the timeline: the period, or (Overview) all the projects with a day either side
+    if (!shown.length) { chart.innerHTML = '<p class="home-note combo-empty">Click a project\'s chip to see it in the overview.</p>'; return; }
+    // On its own: the days to fit across the timeline: the period, or (Overview) all the projects with a day either side
     let from, to;
     if (comboView === 'overview') {
-      const dated = projects.flatMap(p => p.tasks).filter(t => t.start && t.end);
+      const dated = ovProjects.flatMap(p => p.tasks).filter(t => t.start && t.end);
       const today = dayNumber(parse(todayString()));
       from = (dated.length ? Math.min(...dated.map(t => dayNumber(parse(t.start)))) : today) - 1;
       to = (dated.length ? Math.max(...dated.map(t => dayNumber(parse(t.end)))) : today + 27) + 1;
@@ -506,20 +545,78 @@
       const p = periodOf(comboView, comboDate);
       from = dayNumber(parse(p.start)); to = dayNumber(parse(p.end));
     }
+    if (ovZoom && following()) { // lined up with the editor: its zoom, and the days before its timeline too
+      const lead = Math.ceil((chartEl.getBoundingClientRect().left + labelsW() - chart.getBoundingClientRect().left) / renderedDayW) + 1;
+      const eFrom = dayNumber(chartStart), eTo = eFrom + Math.round(chartEl.querySelector('.track').offsetWidth / renderedDayW);
+      drawCombined(chart, ovProjects, renderedDayW, { from: eFrom - lead, to: eTo });
+      followChart();
+      return;
+    }
     const dayW = Math.max(2, ((chart.clientWidth || 800) - 2) / (to - from + 1));
-    drawCombined(chart, projects, dayW, comboJump ? { from, to } : null);
+    drawCombined(chart, ovProjects, dayW, comboJump ? { from, to } : null);
     comboJump = false;
+  }
+
+  // While a project is open (on a computer), the overview and the editor scroll
+  // together. Normally each keeps its own zoom, and the day at the left edge of the
+  // one is kept at the left edge of the other. After Today or Fit they're lined up:
+  // the overview takes the editor's zoom and each day (and the red today line) sits
+  // right above the same day in the editor; as the overview is wider (no task list),
+  // it shows more of the days before. That lasts until the overview's own zoom is
+  // changed (its ‹ [Month ▾] ›). On opening, the editor goes to the overview's day.
+  const following = () => inEditor() && homeMain.offsetParent !== null && !turnedOn() && renderedDayW && chartStart && chartEl.querySelector('.track');
+  let adopted = false; // (the editor has taken the overview's day, once, on opening)
+  let ovZoom = null;   // the editor's zoom, while the overview is lined up with it
+  const ovScroll = () => homeMain.querySelector('.combo-chart .combo-scroll');
+  const ovLeftDay = s => +s.dataset.min / DAY + s.scrollLeft / +s.dataset.dayw;
+  // How many days further left the overview starts than the editor's timeline, when lined up
+  const ovLead = s => ovZoom && ovZoom === renderedDayW
+    ? (chartEl.getBoundingClientRect().left + labelsW() - s.getBoundingClientRect().left) / renderedDayW : 0;
+  // The editor moved: the overview moves along
+  function followChart() {
+    const s = ovScroll();
+    if (!s || !following()) return;
+    if (!adopted) { adopted = true; if (!ovZoom) return window.onCombinedScroll(ovLeftDay(s)); }
+    const day = getScrollDay() - ovLead(s);
+    if (Math.abs(ovLeftDay(s) - day) * +s.dataset.dayw > 1) scrollCombinedToDay(homeMain.querySelector('.combo-chart'), day);
+  }
+  // The overview moved: the editor moves along
+  window.onCombinedScroll = day => {
+    const s = ovScroll();
+    if (!following() || chipDrag || !s) return;
+    const target = (day + ovLead(s) - dayNumber(chartStart)) * renderedDayW;
+    if (Math.abs(chartEl.scrollLeft - target) > 1) chartEl.scrollLeft = target;
+  };
+  // Today or Fit in the editor: the overview lines up with it
+  function alignOverview() {
+    if (!following() || read(OV_KEY) === '1') return;
+    ovZoom = renderedDayW;
+    adopted = true;
+    drawHome();
+  }
+  function afterRender() {
+    document.getElementById('overviewBtn')?.classList.toggle('active', !!overviewReturn);
+    if (ovZoom && following() && ovZoom !== renderedDayW) alignOverview(); // (still lined up: the editor zoomed)
+  }
+
+  // The edit bar's chip: the open project's (its colour comes from app.js)
+  function drawEditChip() {
+    const chip = document.querySelector('.edit-chip');
+    if (!chip || !OPEN_ID) return;
+    chip.dataset.key = editKey();
+    chip.title = readOnly ? `${projectName}\nRight-click or press and hold for more.` : `${projectName}\nClick to rename the project. Right-click or press and hold for more.`;
   }
 
   // A new window size: the period fits again (the timeline stays where it is)
   let resizeTimer = null;
   addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (root.classList.contains('page-projects') && !chipDrag) drawHome(); }, 150);
+    resizeTimer = setTimeout(() => { if (!chipDrag && (root.classList.contains('page-projects') || inEditor())) drawHome(); }, 150);
   });
 
   // ‹ and ›: one period back or forward (one screen in Overview)
   function comboStep(dir) {
+    ovZoom = null; // (its own zoom again)
     if (comboView === 'overview') {
       const s = homeMain.querySelector('.combo-scroll');
       if (s) s.scrollBy({ left: dir * s.clientWidth });
@@ -532,6 +629,7 @@
     drawHome();
   }
   function setComboView(v) {
+    ovZoom = null;
     if (v === 'overview' && comboView === 'overview') v = comboBack; // (Overview again: back to where you were)
     else if (v === 'overview') comboBack = comboView;
     comboView = v;
@@ -551,112 +649,117 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && comboMenu() && !comboMenu().hidden) { showComboMenu(false); homeMain.querySelector('.combo-view-btn').focus(); } });
 
   // Choosing what the timeline shows
-  function setShown(key, on) {
+  function setShown(key, on, redraw = true) {
     const chosen = picked() || new Set(comboList.map(keyOf)); // (all of them, until you choose)
     on ? chosen.add(key) : chosen.delete(key);
     store(PICK_KEY, JSON.stringify([...chosen]));
-    drawHome(); // (its chip leaves the row, or comes back; the timeline keeps its place)
+    if (redraw) drawHome(); // (its chip moves; the timeline keeps its place)
+  }
+  // Moves a project's chip to 'shelf' (not shown), 'overview' or 'edit' (opens it
+  // in the editor; the one open there goes into the overview). Moving the open
+  // project's chip away closes the editor (Leaving asks first about unsaved changes).
+  function moveChip(key, to) {
+    const p = comboList.find(x => keyOf(x) === key), open = key === editKey();
+    if (to === 'edit') { if (!open && p) location.href = location.pathname + hrefOf(p); return; } // (its own page)
+    if (open) return goHome(); // (back to All projects; its chip stays where it was)
+    setShown(key, to === 'overview');
   }
 
-  // A chip: click it to show or hide its project on the timeline (or drag it
-  // there to show it); its pen opens the project; right-click or press and hold
-  // for its ⋮ menu. (Pointer events, so it works with a finger too.)
-  let chipDrag = null; // { chip, key, x, y, ghost, moved, held, timer }
-  homeMain.addEventListener('pointerdown', e => {
-    const chip = e.target.closest('.combo-pick .pick');
-    if (!chip || e.button !== 0 || e.target.closest('.pick-edit')) return;
-    const d = chipDrag = { chip, key: chip.dataset.key, x: e.clientX, y: e.clientY, moved: false, held: false };
-    chip.setPointerCapture(e.pointerId);
+  // A chip (in the All projects area, or the edit bar): click it to move it (on
+  // the shelf into the overview; in the overview, or the edit bar, back to the
+  // shelf), its pen (or eye) opens it in the editor; right-click or press and hold
+  // for its menu. (Pointer events, so it works with a finger too.)
+  let chipDrag = null; // { chip, key, x, y, held, timer } while a chip is pressed
+  const chipAt = e => !e.target.closest?.('.project-dot-wrap') && e.target.closest?.('#homeMain .pick[data-key], .edit-chip[data-key]'); // (not its colour dot)
+  const nameEditing = () => nameEl.isContentEditable;
+  document.addEventListener('pointerdown', e => {
+    const chip = chipAt(e);
+    if (!chip || e.button !== 0 || nameEditing() || e.target.closest('.pick-edit')) return;
+    const d = chipDrag = { chip, key: chip.dataset.key, x: e.clientX, y: e.clientY, held: false };
     d.timer = setTimeout(() => { // pressed and held without moving: its menu
-      if (chipDrag !== d || d.moved) return;
+      if (chipDrag !== d) return;
       d.held = true;
       navigator.vibrate?.(15);
       openProjectMenu(d.key, chip);
     }, 550);
   });
-  homeMain.addEventListener('pointermove', e => {
+  document.addEventListener('pointermove', e => { // (moving away: not a press and hold)
     const d = chipDrag;
-    if (!d || d.held) return;
-    if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return; // (a click, so far)
-    if (!d.moved) { // the drag starts: a copy of the chip follows the pointer
-      d.moved = true;
-      clearTimeout(d.timer);
-      d.ghost = d.chip.cloneNode(true);
-      d.ghost.classList.add('pick-ghost');
-      document.body.append(d.ghost);
-      d.chip.classList.add('dragging');
-      homeMain.querySelector('.combo-chart').classList.add('drop-ready');
-    }
-    d.ghost.style.left = `${e.clientX}px`;
-    d.ghost.style.top = `${e.clientY}px`;
-    homeMain.querySelector('.combo-chart').classList.toggle('drop-over', overChart(e));
+    if (d && !d.held && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) { clearTimeout(d.timer); chipDrag = null; }
   });
-  const overChart = e => {
-    const r = homeMain.querySelector('.combo-chart').getBoundingClientRect();
-    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-  };
-  function endChipDrag(e, cancelled) {
+  function endChipPress() {
     const d = chipDrag;
     if (!d) return;
     chipDrag = null;
     clearTimeout(d.timer);
-    if (d.moved || d.held) { // (the click that follows isn't an "open")
+    if (d.held) { // (the click that follows isn't a move)
       d.chip.dataset.dragged = '1';
       setTimeout(() => delete d.chip.dataset.dragged, 0);
     }
-    if (!d.moved) return;
-    d.ghost.remove();
-    d.chip.classList.remove('dragging');
-    homeMain.querySelector('.combo-chart').classList.remove('drop-ready', 'drop-over');
-    if (!cancelled && overChart(e)) setShown(d.key, true);
   }
-  homeMain.addEventListener('pointerup', e => endChipDrag(e, false));
-  homeMain.addEventListener('pointercancel', e => endChipDrag(e, true));
-  homeMain.addEventListener('contextmenu', e => { // right-click on a chip, or on a project's row: its menu
-    const chip = e.target.closest('.combo-pick .pick');
-    if (!chip) return;
+  document.addEventListener('pointerup', endChipPress);
+  document.addEventListener('pointercancel', endChipPress);
+  document.addEventListener('contextmenu', e => { // right-click on a chip: its menu
+    const chip = chipAt(e);
+    if (!chip || nameEditing()) return;
     e.preventDefault();
     if (!chipDrag?.held) openProjectMenu(chip.dataset.key, chip);
+  });
+  // (the project's own name in its top bar: click it to rename the project; "WorkNest /" goes back)
+  const clickChip = chip => chip.classList.contains('edit-chip') ? startProjectRename()
+    : moveChip(chip.dataset.key, chip.closest('.overview-chips') && !chip.classList.contains('on') ? 'overview' : 'shelf');
+  document.addEventListener('click', e => {
+    const pen = e.target.closest?.('#homeMain .pick-edit'); // the pen / eye: into the editor
+    if (pen) return moveChip(pen.dataset.key, 'edit');
+    const chip = chipAt(e);
+    if (chip && !chip.dataset.dragged && !nameEditing()) clickChip(chip);
+  });
+  document.addEventListener('keydown', e => {
+    const chip = (e.key === 'Enter' || e.key === ' ') && !nameEditing() && e.target.matches?.('#homeMain .pick[data-key], .edit-chip[data-key]') && e.target;
+    if (!chip) return;
+    e.preventDefault();
+    clickChip(chip);
   });
 
   homeMain.addEventListener('click', e => {
     if (e.target.closest('#newProjectBtn, .home-new-inline')) return showCloud('newproject');
-    if (e.target.closest('.pick-edit')) return; // (the pen: a link to the project)
-    const chip = e.target.closest('.combo-pick .pick');
-    if (chip) { if (!chip.dataset.dragged) setShown(chip.dataset.key, !chip.classList.contains('on')); return; }
-    const remove = e.target.closest('.combo-remove'); // ✕ on a project's row: off the timeline
-    if (remove) return setShown(remove.dataset.key, false);
-    const more = e.target.closest('.combo-more'); // ⋮ on a project's row
-    if (more) return openProjectMenu(more.dataset.key, more);
+    const tog = e.target.closest('.ov-toggle'); // ∨ Overview: fold the overview away, or open it
+    if (tog) { store(OV_KEY, read(OV_KEY) === '1' ? null : '1'); return drawHome(); }
+    const period = e.target.closest('.combo-headwrap [data-view][data-date]'); // a quarter / month / week / day in its dates
+    if (period) {
+      ovZoom = null;
+      comboView = period.dataset.view; comboDate = period.dataset.date; store(VIEW_KEY_COMBO, comboView); comboJump = true;
+      return drawHome();
+    }
     if (e.target.closest('.combo-view-btn')) return showComboMenu(comboMenu().hidden);
     const viewItem = e.target.closest('[data-cview]');
     if (viewItem) return setComboView(viewItem.dataset.cview);
     const stepBtn = e.target.closest('.combo-nav [data-step]');
     if (stepBtn) return comboStep(+stepBtn.dataset.step);
+    if (e.target.closest('.combo-today, .ov-today') && following()) return document.getElementById('todayBtn').click(); // (both, lined up)
+    if (e.target.closest('.ov-today')) { // (on its own: today's period)
+      if (comboView === 'overview') return combinedToday(homeMain.querySelector('.combo-chart'));
+      comboDate = todayString(); comboJump = true; return drawHome();
+    }
+    if (e.target.closest('.ov-fit')) return setComboView('overview'); // (fit its projects, or back again)
     if (e.target.closest('.combo-today')) {
       if (comboView === 'overview') return combinedToday(homeMain.querySelector('.combo-chart'));
       comboDate = todayString(); comboJump = true; return drawHome();
     }
     const pickAll = e.target.closest('[data-pick]');
-    if (pickAll) { store(PICK_KEY, pickAll.dataset.pick === 'all' ? null : '[]'); return drawHome(); } // (Show all projects / Clear the timeline)
+    if (pickAll) { store(PICK_KEY, pickAll.dataset.pick === 'all' ? null : '[]'); return drawHome(); } // (Show all / Hide all)
   });
   searchEl.addEventListener('input', drawHome);
-  homeMain.addEventListener('keydown', e => { // Enter or Space on a chip: show / hide it
-    const chip = (e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.combo-pick .pick') && e.target;
-    if (!chip) return;
-    e.preventDefault();
-    setShown(chip.dataset.key, !chip.classList.contains('on'));
-  });
   // Pointing at a chip, or at one of its project's bars, brings out both: the
   // chip and all the project's bars stand out, the other chips and bars fade
   function focusProject(key) {
-    const chart = homeMain.querySelector('.combo-chart'), pick = homeMain.querySelector('.combo-pick');
+    const chart = homeMain.querySelector('.combo-chart'), pick = homeMain.querySelector('.overview-chips');
     chart?.classList.toggle('focusing', !!key);
     pick?.classList.toggle('focusing', !!key);
-    for (const el of homeMain.querySelectorAll('.combo-lane, .combo-pick .pick.on')) el.classList.toggle('hl', !!key && el.dataset.key === key);
+    for (const el of homeMain.querySelectorAll('.combo-lane, .overview-chips .pick')) el.classList.toggle('hl', !!key && el.dataset.key === key);
   }
   homeMain.addEventListener('pointerover', e => {
-    const chip = e.target.closest('.combo-pick .pick.on');
+    const chip = e.target.closest('.overview-chips .pick');
     const lane = !chip && e.target.closest('.combo-lane .bar')?.closest('.combo-lane');
     focusProject((chip || lane)?.dataset.key || null);
   });
@@ -668,8 +771,13 @@
   function openProjectMenu(key, anchor) {
     const p = comboList.find(x => keyOf(x) === key);
     if (!p) return;
-    menuFor = { kind: p.kind, id: p.id, name: p.name || 'Untitled' };
-    tileMenu.innerHTML = `<button type="button" data-act="open">Open</button>
+    menuFor = { kind: p.kind, id: p.id, name: p.name || 'Untitled', key };
+    const place = key === editKey() ? 'edit' : isOn(p) ? 'overview' : 'shelf'; // ('shelf': not shown)
+    tileMenu.innerHTML = `${place === 'edit'
+        ? `${readOnly ? '' : '<button type="button" data-act="rename">Rename…</button>'}<button type="button" data-act="close">Back to All projects</button>`
+        : `<button type="button" data-act="edit">${p.kind === 'shared' ? 'Open (view only)' : 'Edit'}</button>
+           <button type="button" data-act="${place === 'shelf' ? 'show' : 'hide'}">${place === 'shelf' ? 'Show in the overview' : 'Hide'}</button>`}
+      <hr>
       ${labelsState === 'ok' ? '<button type="button" data-act="label">Label…</button>' : ''}
       ${p.kind === 'local' ? '<button type="button" data-act="move">Move online…</button>' : p.kind === 'online' ? '<button type="button" data-act="share">Share…</button>' : ''}
       ${p.kind === 'shared' ? '' : '<hr><button type="button" data-act="delete" class="danger">Delete…</button>'}`;
@@ -681,7 +789,7 @@
   }
   const closeTileMenu = () => { tileMenu.hidden = true; };
   document.addEventListener('pointerdown', e => {
-    if (!tileMenu.hidden && !tileMenu.contains(e.target) && !e.target.closest('.combo-more, .combo-pick .pick')) closeTileMenu();
+    if (!tileMenu.hidden && !tileMenu.contains(e.target) && !chipAt(e)) closeTileMenu();
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !tileMenu.hidden) closeTileMenu(); });
   addEventListener('scroll', closeTileMenu, true);
@@ -689,9 +797,13 @@
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (!act) return;
     closeTileMenu();
-    const { kind, id, name } = menuFor;
+    const { kind, id, name, key } = menuFor;
     const where = kind === 'local' ? `?local=${encodeURIComponent(id)}` : `?p=${encodeURIComponent(id)}`;
-    if (act === 'open') location.href = location.pathname + where;
+    if (act === 'edit') return moveChip(key, 'edit');
+    if (act === 'show') return moveChip(key, 'overview');
+    if (act === 'hide' || act === 'close') return moveChip(key, 'shelf');
+    if (act === 'rename') return startProjectRename();
+    if (act === 'share' && key === editKey()) return showCloud('share');
     if (act === 'label') showCloud('label', { key: `${kind}:${id}`, name });
     if (act === 'share') location.href = `${location.pathname}${where}&share=1`;
     if (act === 'move') showCloud('moveonline', { id });
@@ -701,8 +813,8 @@
         : 'The project and all its comments and images are deleted <b>for everyone</b>, and its link stops working. This can\'t be undone.', 'Delete');
       if (!ok) return;
       const forget = () => { if (mine.projectLabels[`${kind}:${id}`]) { delete mine.projectLabels[`${kind}:${id}`]; saveMine(); } };
-      if (kind === 'local') { deleteLocal(id); forget(); return drawHome(); }
-      try { await cloud.deleteProject(id); forget(); drawProjects(); }
+      if (kind === 'local') { deleteLocal(id); forget(); return key === editKey() ? goHome() : drawHome(); }
+      try { await cloud.deleteProject(id); forget(); if (key === editKey()) return goHome(); drawProjects(); }
       catch (err) { console.error(err); showCloud('error', { message: 'Couldn\'t delete the project. Check your connection and try again.' }); }
     }
   });
@@ -975,8 +1087,15 @@
   }
 
   // ---- The account menu ----
+  const THEME_KEY = 'worknest-theme'; // 'light' | 'dark' (none: Auto); read before the page shows (index.html)
+  const SUN_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  const MOON_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
   function drawAccountMenu() {
+    const theme = read(THEME_KEY) || 'auto';
+    const opt = (v, label, icon) => `<button type="button" data-theme-pick="${v}" class="${theme === v ? 'on' : ''}" aria-pressed="${theme === v}">${icon}${label}</button>`;
     accountMenu.innerHTML = `<div class="acct-head">Signed in as<b>${esc(user.email)}</b></div>
+      <div class="acct-theme" role="group" aria-label="Appearance"><span>Appearance</span>
+        <div class="theme-seg">${opt('light', 'Light', SUN_ICON)}${opt('dark', 'Dark', MOON_ICON)}${opt('auto', 'Auto', '')}</div></div>
       ${ONLINE_ID ? '<button type="button" data-home>All projects</button>' : ''}
       <button type="button" data-signout>Sign out</button>`;
   }
@@ -992,6 +1111,12 @@
     const b = e.target.closest('button');
     if (!b) return;
     if (b.matches('[data-home]')) return goHome();
+    if (b.dataset.themePick) { // Light / Dark / Auto (Auto: as the computer is set), remembered on this computer
+      const t = b.dataset.themePick;
+      store(THEME_KEY, t === 'auto' ? null : t);
+      if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
+      return drawAccountMenu();
+    }
     if (b.matches('[data-signout]')) {
       if (saveTimer) await sendNow(); // (your last change first)
       await cloud.signOut();
@@ -1019,11 +1144,11 @@
     readOnly = !owner;
     cloudSave = owner ? sendNow : null; // (Save: sends the project online; resolves true when it's saved)
     root.classList.toggle('read-only', readOnly);
-    nameEl.contentEditable = owner ? 'plaintext-only' : 'false';
-    nameEl.title = owner ? 'Click to rename the project' : '';
     const viewOnly = document.getElementById('viewOnlyBadge'); // (someone else's project: whose, and view only)
     viewOnly.hidden = owner;
-    viewOnly.querySelector('.view-who').textContent = owner ? '' : `Shared by ${data.owner} · `;
+    viewOnly.title = owner ? '' : `Shared by ${data.owner}. You can see the plan and write comments, but not change it`;
+    window.drawPresets?.(); // (no presets shelf when viewing)
+    if (typeof drawSaveState === 'function') drawSaveState(); // (Undo, Redo and Save greyed out when viewing)
     // Our own changes coming back, or older than changes not sent yet, are skipped;
     // so is everything while you have unsaved changes (they'd be lost)
     const fresh = !saving && !sent.includes(data.data) && !isDirty();
@@ -1038,6 +1163,7 @@
     }
     drawToolbar();
     safeRender();
+    drawEditChip();
     if (fresh) markSaved(firstData); // (this is the saved version now)
     if (firstData && owner) restoreDraft(); // (unsaved changes from last time)
     if (firstData) { // the first time: show the remembered view around today, as on opening
@@ -1113,6 +1239,7 @@
     }
     document.getElementById('placeBadge').hidden = false;
     showProjectName();
+    drawEditChip();
     safeRender();
     if (view) openView(view, todayString()); else scrollToToday();
     checkComingUp();
@@ -1120,6 +1247,20 @@
 
   // ================= Starting up =================
   window.collab = {
+    afterRender, followChart, alignOverview,
+    // Your presets (presets.js): kept with your account, next to your labels
+    presetsApi: () => config && user ? {
+      state: () => labelsState,
+      list: () => mine.presets || [],
+      save: async list => { mine.presets = list; await saveMine(); },
+    } : null,
+    // The open project was saved: its chip and bars on All projects take its colour
+    colorSaved(color) {
+      const p = comboList.find(x => keyOf(x) === editKey());
+      if (p) { p.data = { ...(p.data || {}), color: color || undefined }; drawHome(); }
+    },
+    // Fit: the dates of the projects in the overview (ms), when it's shown above the editor
+    overviewSpan: () => [], // (Fit fits the project; the overview has its own zoom)
     // The open project's label colour (for its dot, when no colour of its own is chosen)
     labelColor() {
       const id = LOCAL_ID || ONLINE_ID;
@@ -1146,7 +1287,8 @@
 
   if (!config) return; // (everything stays in this browser, as before)
   root.classList.add('cloud');
-  showPage('loading');
+  const SIGNED_IN_KEY = 'worknest-signed-in'; // (remembered, so the next page doesn't flash the start screen; index.html)
+  if (!root.classList.contains('page-app') && !root.classList.contains('page-projects')) showPage('loading');
   if (ONLINE_ID) { // view only until we know whether this is your project
     readOnly = true;
     root.classList.add('read-only');
@@ -1162,7 +1304,8 @@
       <button type="button" class="start-again">Back to signing in</button>`;
     showPage('start');
   }
-  const loading = () => root.classList.contains('page-loading');
+  let knownUser = false; // (Firebase has said whether you're signed in)
+  const loading = () => !knownUser; // (still opening: problems are shown on the page)
   addEventListener('error', e => { if (loading()) showProblem(e.error || e.message); });
   addEventListener('unhandledrejection', e => { if (loading()) showProblem(e.reason); });
   setTimeout(() => { if (loading()) showProblem('opening took too long (check your connection)'); }, 20000);
@@ -1201,19 +1344,16 @@
       try {
         user = u;
         drawToolbar();
+        knownUser = true;
+        try { u ? localStorage.setItem(SIGNED_IN_KEY, '1') : localStorage.removeItem(SIGNED_IN_KEY); } catch {}
         if (!u) {
           stopWatching();
           if (!linking) { drawStart(); showPage('start'); }
           return;
         }
-        if (ONLINE_ID || LOCAL_ID) { // (your labels, for the project's dot when it has no colour of its own)
-          cloud.getMine(u.uid).then(saved => {
-            mine = { labels: Array.isArray(saved?.labels) ? saved.labels : [], projectLabels: saved?.projectLabels || {} };
-            drawProjectColor();
-          }, () => {});
-        }
         if (ONLINE_ID) { showPage('app'); watch(); }
         else if (LOCAL_ID) openLocal();
+        if (ONLINE_ID || LOCAL_ID) drawProjects(); // (All projects above the open project; also your labels, for its colour)
         else { showPage('projects'); drawProjects(); }
         drawThread();
       } catch (err) { showProblem(err); }
