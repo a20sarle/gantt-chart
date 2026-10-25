@@ -12,8 +12,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=2026-10-25.1">
-<script src="firebase-config.js?v=2026-10-25.1"></script>
+<link rel="stylesheet" href="styles.css?v=2026-10-25.3">
+<script src="firebase-config.js?v=2026-10-25.3"></script>
 <script>
   // With Firebase set up, the page to show depends on whether you're signed in, which
   // takes Firebase a moment to tell. If you were signed in last time (remembered on
@@ -86,6 +86,8 @@
         </div>
       </span>
       <span id="placeBadge" class="place-badge" hidden title="Saved in this browser only: not on your other devices, can't be shared, and lost if the browser's data is cleared"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 16v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> On this computer only</span>
+      <!-- Your own project, saved online (open it anywhere, share it) -->
+      <span id="onlineBadge" class="place-badge online-badge" hidden title="Saved online: open it on any device, and share it with others"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.75 4.75 0 0 0 7 18.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg> Online</span>
       <!-- Someone else's project: whose it is, and that you can only view it (and comment) -->
       <span id="viewOnlyBadge" class="place-badge view-badge" hidden title="You can see the plan and write comments, but not change it"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg><span class="view-who"></span>View only</span>
       <span class="spacer"></span>
@@ -235,9 +237,9 @@
 <!-- Filled with a copy of the whole chart just before saving an image -->
 <div id="exportArea" class="export"></div>
 
-<script src="app.js?v=2026-10-25.1"></script>
-<script src="combined.js?v=2026-10-25.1"></script>
-<script src="collab.js?v=2026-10-25.1"></script>
-<script src="presets.js?v=2026-10-25.1"></script>
+<script src="app.js?v=2026-10-25.3"></script>
+<script src="combined.js?v=2026-10-25.3"></script>
+<script src="collab.js?v=2026-10-25.3"></script>
+<script src="presets.js?v=2026-10-25.3"></script>
 </body>
 </html>

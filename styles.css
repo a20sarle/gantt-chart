@@ -1633,3 +1633,8 @@
                                  border-radius: 999px; font-size: 12.5px; color: var(--muted); text-align: center; }
   .acct-menu .theme-seg button.on { background: var(--accent); color: var(--on-accent); }
   .acct-menu .theme-seg button.on:hover { background: var(--accent); }
+  .online-badge { border-style: solid; }
+  .home-tip { position: relative; padding-right: 40px; }
+  .home-tip .tip-close { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 28px; height: 28px; padding: 0;
+                         border: none; border-radius: 999px; background: none; color: var(--muted); }
+  .home-tip .tip-close:hover { background: var(--panel); color: var(--text); }

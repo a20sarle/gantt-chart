@@ -359,6 +359,7 @@
   // projectLabels: { '<kind>:<project id>': label id } }. A project's colour in
   // the timeline is its label's, and projects are listed by label.
   let mine = { labels: [], projectLabels: {}, presets: [] }; // (presets: presets.js)
+  const TIP_KEY = 'worknest-labels-tip-hidden'; // (the labels tip on All projects, closed)
   let labelsState = 'loading'; // 'loading' | 'ok' | 'error' (e.g. the database rules aren't updated yet)
   const LABEL_COLORS = ['#ff6b4a', '#ffc145', '#b8b5ff', '#3fb6a8', '#4f8ff7', '#f06fa8', '#6cc070', '#8a8fa8'];
   const NO_LABEL_COLOR = '#c9cad3';
@@ -414,10 +415,13 @@
           <button type="button" class="home-new-inline">+ New project</button></div>`;
       return;
     }
-    const tip = !loading && labelsState === 'ok' && !mine.labels.length && everything.length
-      ? '<p class="home-tip">Tip: group your projects with labels, for example one per customer. Use <b>⋮ → Label…</b> on a project in the timeline.</p>' : '';
+    // (until you have a label, or close the tip with its ✕)
+    const tip = !loading && labelsState === 'ok' && !mine.labels.length && everything.length && read(TIP_KEY) !== '1'
+      ? `<p class="home-tip">Tip: group your projects with <b>labels</b>, for example one per customer. Right-click a project's chip above the timeline (on a phone: press and hold it) and choose <b>Label…</b>.
+          <button type="button" class="tip-close" title="Hide this tip" aria-label="Hide this tip">✕</button></p>` : '';
     const note = labelsState === 'error' ? '<p class="home-tip">Labels need the updated database rules (see the README).</p>' : '';
     homeMain.innerHTML = title + tip + note + '<div class="combo" id="combo"></div>';
+    homeMain.querySelector('.tip-close')?.addEventListener('click', () => { store(TIP_KEY, '1'); drawHome(); });
     drawCombo(everything, q, loading, failed);
   }
 
@@ -1146,6 +1150,7 @@
     root.classList.toggle('read-only', readOnly);
     const viewOnly = document.getElementById('viewOnlyBadge'); // (someone else's project: whose, and view only)
     viewOnly.hidden = owner;
+    document.getElementById('onlineBadge').hidden = !owner; // (your own project, online)
     viewOnly.title = owner ? '' : `Shared by ${data.owner}. You can see the plan and write comments, but not change it`;
     window.drawPresets?.(); // (no presets shelf when viewing)
     if (typeof drawSaveState === 'function') drawSaveState(); // (Undo, Redo and Save greyed out when viewing)

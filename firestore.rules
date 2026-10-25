@@ -9,8 +9,8 @@
 // - Everyone on a project can read its comments and images, and write
 //   comments (as themselves). A comment can be deleted by whoever wrote it, or
 //   by the project's owner.
-// - Everyone has their own settings (their labels), which only they can read
-//   and change.
+// - Everyone has their own settings (their labels and activity groups), which
+//   only they can read and change.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -30,9 +30,14 @@ service cloud.firestore {
       return signedIn() && (projectData(pid).owner == me() || me() in projectData(pid).viewers);
     }
 
+    // Your own settings: your labels and your activity groups. Reading and saving
+    // have separate rules: a read has no "request.resource" (nothing is being saved),
+    // and a rule that looks at it would refuse every read.
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid
-        && (request.resource == null || request.resource.data.labels.size() <= 200);
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.labels is list
+        && request.resource.data.labels.size() <= 200;
     }
 
     match /projects/{pid} {
