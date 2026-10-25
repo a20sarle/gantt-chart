@@ -42,8 +42,9 @@
     const presets = state === 'ok' ? list() : [];
     shelf.innerHTML = `
       ${state === 'loading' ? '<p class="side-empty">Loading…</p>'
-        : state === 'error' ? '<p class="side-empty">Your activity groups couldn\'t be loaded.</p>'
+        : state === 'error' ? '<p class="side-empty">Activity groups need the updated database rules (see the README).</p>'
         : !presets.length ? '<p class="side-empty">Groups you use again and again, placed around a key date.</p>'
+        : readOnly ? '<p class="side-empty">Click one to edit it. To place one, open one of your own projects.</p>'
         : `<p class="side-empty">${useTurnedMap() ? 'Tap one to add it on a date.' : 'Drag one onto the chart, onto its key date.'}</p>`}
       ${presets.map(p => `<button type="button" class="preset-chip side-proj" data-preset="${esc(p.id)}" style="--dot:${colorOf(p).bg}"
           title="${esc(p.name)}: ${activities(p.items.length)}. Drag onto the chart and drop on the key date (${esc(keyItem(p).name)}); click to edit">
@@ -126,7 +127,7 @@
   shelf.addEventListener('pointermove', e => {
     if (!press) return;
     if (!press.dragging) {
-      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < 5 || useTurnedMap()) return;
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < 5 || useTurnedMap() || readOnly) return; // (not onto a project you can only view)
       press.dragging = true;
       ghost.hidden = false;
       document.documentElement.classList.add('preset-dragging');
@@ -175,7 +176,6 @@
   // ---- The preset editor ----
   let draft = null, draftIsNew = false;
   function openEditor(p, { fromGroup = false } = {}) {
-    if (readOnly) return;
     draftIsNew = !p || !p.id;
     draft = p ? JSON.parse(JSON.stringify(p)) : {
       id: null, name: '', color: Math.floor(Math.random() * PALETTE.length),
@@ -221,7 +221,7 @@
         </li>`;
       }).join('')}</ol>
       <button type="button" class="sheet-adder pe-add">+ Add activity</button>
-      <div class="pe-place">
+      <div class="pe-place"${readOnly ? ' hidden' : ''}>
         <label>Add to this project with the key date on <input type="date" class="pe-date" value="${todayString()}"></label>
         <button type="button" class="pe-place-btn">Add</button>
       </div>
