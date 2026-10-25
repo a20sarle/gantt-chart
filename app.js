@@ -115,8 +115,14 @@ function drawProjectColor() {
   for (const b of colorPop.querySelectorAll('[data-color]')) b.classList.toggle('on', b.dataset.color === projectColor);
   if (document.activeElement !== colorHex) colorHex.value = projectColor;
   colorNative.value = shown.length === 7 ? shown : NO_COLOR;
-  document.getElementById('colorReset').hidden = !projectColor;
-  document.getElementById('colorReset').textContent = label ? "Use the label's colour" : 'No colour';
+  // "Colour from the label": always there, ticked while the project follows its label
+  // (it has no colour of its own); click it to go back to the label's colour
+  const reset = document.getElementById('colorReset');
+  reset.hidden = false;
+  reset.classList.toggle('on', !projectColor);
+  reset.setAttribute('aria-pressed', !projectColor);
+  reset.textContent = `${projectColor ? '' : '✓ '}${label ? 'Colour from the label' : 'No colour'}`;
+  reset.title = projectColor ? (label ? "Go back to the label's colour" : 'Remove the colour') : (label ? "In use: the project takes its label's colour" : 'In use: no colour chosen');
 }
 function setProjectColor(c) {
   if (readOnly || c === projectColor) return;

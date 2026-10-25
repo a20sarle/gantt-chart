@@ -457,7 +457,7 @@
     return p ? keyOf(p) : `${LOCAL_ID ? 'local' : isOwner() ? 'online' : 'shared'}:${OPEN_ID}`;
   };
   const chipTitle = p => `${p.name || 'Untitled'}${labelOf(p) ? ` (${labelOf(p).name})` : ''}${p.kind === 'shared' ? ' (shared with you: view only)' : ''}\n${isOn(p)
-    ? 'In the overview. Click to hide it.' : 'Not in the overview. Click to show it there.'} The ${p.kind === 'shared' ? 'eye opens it (view only)' : 'pen opens it for editing'}. Right-click or press and hold for more.`;
+    ? 'In the overview. Click to hide it.' : 'Not in the overview. Click to show it there.'} The ${p.kind === 'shared' ? 'eye opens it (view only)' : 'pen opens it for editing'}.${p.kind === 'shared' ? '' : ' Double-click to rename it.'} Right-click or press and hold for more.`;
   const PEN_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
   const EYE_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
   const NO_LABEL_BAR = '#9a9aa0'; // (a project without a label: grey, on its chip and its bars)
@@ -486,33 +486,184 @@
       </div>`;
   }
 
+  // The soft tint behind each label's chips on All projects: one rounded block for
+  // each line its chips are on (redrawn when the width changes)
+  let tintWatch = null;
+  function drawLabelTints() {
+    const box = homeMain.querySelector('.label-flow'), svg = box?.querySelector('.label-tints');
+    if (!svg) return;
+    tintWatch ||= new ResizeObserver(() => drawLabelTints());
+    if (!box.dataset.watched) { tintWatch.disconnect(); tintWatch.observe(box); box.dataset.watched = '1'; }
+    const b = box.getBoundingClientRect();
+    svg.setAttribute('width', b.width); svg.setAttribute('height', b.height);
+    const groups = new Map();
+    for (const el of box.querySelectorAll('[data-lg]')) {
+      const r = el.getBoundingClientRect(), g = el.dataset.lg;
+      if (!r.width) continue;
+      if (!groups.has(g)) groups.set(g, { color: getComputedStyle(el).getPropertyValue('--label').trim(), lines: [] });
+      const lines = groups.get(g).lines, x = { l: r.left - b.left, r: r.right - b.left, t: r.top - b.top, b: r.bottom - b.top };
+      const line = lines.find(y => Math.abs(y.t - x.t) < 4);
+      if (line) { line.l = Math.min(line.l, x.l); line.r = Math.max(line.r, x.r); line.b = Math.max(line.b, x.b); } else lines.push(x);
+    }
+    const P = 7;
+    svg.innerHTML = [...groups.values()].flatMap(({ color, lines }) => lines.map(x =>
+      `<rect x="${x.l - P}" y="${x.t - P}" width="${x.r - x.l + 2 * P}" height="${x.b - x.t + 2 * P}" rx="12" fill="${color}" fill-opacity=".13"/>`)).join('');
+  }
+
+  // Renaming on All projects: a project (double-click its chip) or a label (click its
+  // name). The name becomes editable right there: Enter saves, Esc cancels.
+  let renamingChip = false;
+  function editInPlace(el, done) {
+    renamingChip = true;
+    const before = el.textContent;
+    el.contentEditable = 'plaintext-only';
+    el.focus();
+    getSelection().selectAllChildren(el);
+    let finished = false;
+    const finish = save => {
+      if (finished) return;
+      finished = true;
+      renamingChip = false;
+      el.contentEditable = 'false';
+      const name = el.textContent.replace(/\s+/g, ' ').trim();
+      if (!save || !name || name === before) { el.textContent = before; return drawHome(); }
+      done(name);
+    };
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    el.addEventListener('blur', () => finish(true), { once: true });
+  }
+  async function renameProject(key, name) {
+    const p = comboList.find(x => keyOf(x) === key);
+    if (!p || p.kind === 'shared') return drawHome();
+    try {
+      if (p.kind === 'local') { const d = readLocal(p.id); if (d) writeLocal(p.id, { ...d, name }, Date.now()); }
+      else {
+        await cloud.saveProject(p.id, { name });
+        const o = Array.isArray(homeOnline) && homeOnline.find(x => x.id === p.id);
+        if (o) o.name = name;
+      }
+    } catch (err) {
+      console.error(err);
+      showCloud('error', { message: 'Couldn\'t rename the project. Check your connection and try again.' });
+    }
+    drawHome();
+  }
+  function renameLabel(id, name) {
+    const l = mine.labels.find(x => x.id === id);
+    if (!l) return drawHome();
+    l.name = name;
+    drawHome(); saveMine();
+  }
+  homeMain.addEventListener('dblclick', e => {
+    const chip = e.target.closest('.label-flow .pick[data-key]');
+    if (!chip || e.target.closest('.pick-edit') || renamingChip) return;
+    clearTimeout(chipClickTimer);
+    const p = comboList.find(x => keyOf(x) === chip.dataset.key);
+    if (!p || p.kind === 'shared') return;
+    e.preventDefault();
+    editInPlace(chip.querySelector('.pick-name'), name => renameProject(chip.dataset.key, name));
+  });
+  homeMain.addEventListener('click', e => {
+    const nameEl = e.target.closest('.label-name[data-label-rename]');
+    if (nameEl && !renamingChip) return editInPlace(nameEl, name => renameLabel(nameEl.dataset.labelRename, name));
+    const dot = e.target.closest('.label-dot[data-label-color]');
+    if (dot) return openLabelColor(dot.dataset.labelColor, dot);
+  });
+
+  // A label's colour: its dot opens a picker (the label colours, any colour, or a hex code)
+  const labelPop = document.createElement('div');
+  labelPop.className = 'menu color-pop label-color-pop';
+  labelPop.setAttribute('role', 'dialog');
+  labelPop.setAttribute('aria-label', "The label's colour");
+  labelPop.hidden = true;
+  labelPop.innerHTML = `<p class="color-pop-head">Label colour</p>
+    <div class="color-swatches">${LABEL_COLORS.map(col => `<button type="button" data-lcolor="${col}" style="--c:${col}" aria-label="${col}" title="${col}"></button>`).join('')}</div>
+    <div class="color-custom">
+      <input type="color" class="lc-native" title="Pick any colour" aria-label="Pick any colour">
+      <input class="lc-hex" maxlength="7" spellcheck="false" autocomplete="off" placeholder="#4f8ff7" aria-label="Colour as a hex code" title="A hex code, like #4f8ff7">
+    </div>`;
+  document.body.append(labelPop);
+  let labelPopFor = null;
+  function openLabelColor(id, dot) {
+    const l = mine.labels.find(x => x.id === id);
+    if (!l) return;
+    if (!labelPop.hidden && labelPopFor === id) { labelPop.hidden = true; return; }
+    labelPopFor = id;
+    for (const b of labelPop.querySelectorAll('[data-lcolor]')) b.classList.toggle('on', b.dataset.lcolor === l.color);
+    labelPop.querySelector('.lc-native').value = /^#[0-9a-f]{6}$/i.test(l.color) ? l.color : '#4f8ff7';
+    labelPop.querySelector('.lc-hex').value = l.color;
+    labelPop.hidden = false;
+    const r = dot.getBoundingClientRect();
+    labelPop.style.left = `${Math.max(8, Math.min(r.left - 8, innerWidth - labelPop.offsetWidth - 8))}px`;
+    labelPop.style.top = `${Math.min(r.bottom + 8, innerHeight - labelPop.offsetHeight - 8)}px`;
+  }
+  let labelColorTimer = null;
+  function setLabelColor(color, close) {
+    const l = mine.labels.find(x => x.id === labelPopFor);
+    if (!l) return;
+    l.color = color;
+    drawHome();
+    clearTimeout(labelColorTimer); // (saved once you stop picking)
+    labelColorTimer = setTimeout(saveMine, 600);
+    if (close) labelPop.hidden = true;
+  }
+  labelPop.addEventListener('click', e => { const b = e.target.closest('[data-lcolor]'); if (b) setLabelColor(b.dataset.lcolor, true); });
+  labelPop.querySelector('.lc-native').addEventListener('input', e => { setLabelColor(e.target.value.toLowerCase()); labelPop.querySelector('.lc-hex').value = e.target.value.toLowerCase(); });
+  labelPop.querySelector('.lc-hex').addEventListener('input', e => {
+    const v = e.target.value.trim(), m = v.match(/^#?([0-9a-f]{6}|[0-9a-f]{3})$/i);
+    if (m) { const h = m[1].length === 3 ? [...m[1]].map(x => x + x).join('') : m[1]; setLabelColor('#' + h.toLowerCase()); }
+  });
+  document.addEventListener('pointerdown', e => { if (!labelPop.hidden && !e.target.closest('.label-color-pop, .label-dot')) labelPop.hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !labelPop.hidden) labelPop.hidden = true; });
+
   // The sidebar on a project's page: your projects (the open one highlighted), to switch
   function drawSideNav() {
     const box = document.getElementById('sideProjects');
     if (!box) return;
     const ek = editKey();
-    box.innerHTML = comboList.map(p => `<a class="side-proj${keyOf(p) === ek ? ' on' : ''}" href="${esc(hrefOf(p))}" style="--dot:${barColorOf(p)}"
+    const item = p => `<a class="side-proj${keyOf(p) === ek ? ' on' : ''}" href="${esc(hrefOf(p))}" style="--dot:${barColorOf(p)}"
         ${keyOf(p) === ek ? 'aria-current="page"' : ''} title="${esc(p.name || 'Untitled')}${p.kind === 'shared' ? ' (shared with you: view only)' : p.kind === 'local' ? ' (on this computer only)' : ''}">
-        <i aria-hidden="true"></i><span>${esc(p.name || 'Untitled')}</span>${p.kind === 'shared' ? EYE_ICON : ''}</a>`).join('')
+        <i aria-hidden="true"></i><span>${esc(p.name || 'Untitled')}</span>${p.kind === 'shared' ? EYE_ICON : ''}</a>`;
+    // Grouped by label, as on All projects: each label's name (with its colour), then its
+    // projects; projects without a label after them
+    const groups = sortedLabels().map(l => ({ l, ps: comboList.filter(p => labelOf(p)?.id === l.id) })).filter(g => g.ps.length);
+    const loose = comboList.filter(p => !labelOf(p));
+    box.innerHTML = groups.map(({ l, ps }) => `<div class="side-group" style="--label:${l.color}">
+        <div class="side-label"><i aria-hidden="true"></i>${esc(l.name)}</div>${ps.map(item).join('')}</div>`).join('')
+      + (loose.length ? `<div class="side-group side-loose${groups.length ? ' after' : ''}">${loose.map(item).join('')}</div>` : '')
       || '<p class="side-empty">Loading…</p>';
   }
+
   document.getElementById('sideNewProject')?.addEventListener('click', () => showCloud('newproject'));
 
   function drawCombo(everything, q, loading, failed) {
     const el = document.getElementById('combo');
     comboList = byLabel(everything);
     const ek = editKey(), match = p => (p.name || '').toLowerCase().includes(q);
-    const chip = p => `<span class="pick${isOn(p) ? ' on' : ''}" data-key="${esc(keyOf(p))}" style="--label:${barColorOf(p)}" title="${esc(chipTitle(p))}"
-      role="button" tabindex="0"><span>${esc(p.name || 'Untitled')}</span><button type="button" class="pick-edit" data-key="${esc(keyOf(p))}"
+    const chip = (p, lg = '', last = false) => `<span class="pick${isOn(p) ? ' on' : ''}${last ? ' lg-last' : ''}" data-key="${esc(keyOf(p))}"${lg ? ` data-lg="${esc(lg)}"` : ''} style="--label:${barColorOf(p)}" title="${esc(chipTitle(p))}"
+      role="button" tabindex="0"><span class="pick-name">${esc(p.name || 'Untitled')}</span><button type="button" class="pick-edit" data-key="${esc(keyOf(p))}"
       title="${p.kind === 'shared' ? 'View' : 'Edit'} ${esc(p.name || 'Untitled')}" aria-label="${p.kind === 'shared' ? 'View' : 'Edit'} ${esc(p.name || 'Untitled')}">${p.kind === 'shared' ? EYE_ICON : PEN_ICON}</button></span>`;
     const others = comboList.filter(p => keyOf(p) !== ek);
     const shown = others.filter(isOn);
+    // Grouped by label: a white label chip (its colour dot, its name), then its projects,
+    // on a soft tint of its colour (drawn per line, see drawLabelTints); projects without
+    // a label after them, on their own
+    const listed = others.filter(match);
+    const labelChip = l => `<span class="label-chip" data-lg="${esc(l.id)}" style="--label:${l.color}">
+        <button type="button" class="label-dot" data-label-color="${esc(l.id)}" title="Change the label's colour" aria-label="Change the colour of ${esc(l.name)}"></button><span class="label-name" data-label-rename="${esc(l.id)}" title="Click to rename the label">${esc(l.name)}</span></span>`;
+    const chipsHtml = sortedLabels().map(l => {
+      const ps = listed.filter(x => labelOf(x)?.id === l.id);
+      return ps.map((x, i) => i === 0 ? `<span class="keep">${labelChip(l)}${chip(x, l.id, ps.length === 1)}</span>` : chip(x, l.id, i === ps.length - 1)).join('');
+    }).join('') + listed.filter(x => !labelOf(x)).map(x => chip(x)).join('');
     const collapsed = read(OV_KEY) === '1';
     el.innerHTML = `
       <div class="overview${collapsed ? ' collapsed' : ''}" data-drop="overview">
         <div class="overview-bar">
-          <button type="button" class="ov-toggle${collapsed ? ' shut' : ''}" aria-expanded="${!collapsed}" title="${collapsed ? 'Show' : 'Hide'} the overview"><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Overview</span></button>
-          <div class="overview-chips">${others.filter(match).map(chip).join('')
+          <button type="button" class="ov-toggle${collapsed ? ' shut' : ''}" aria-expanded="${!collapsed}" title="${collapsed ? 'Show' : 'Hide'} the project chips (the timeline stays)"><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Overview</span>${collapsed ? `<small class="ov-count">${listed.length} project${listed.length === 1 ? '' : 's'}</small>` : ''}</button>
+          <div class="overview-chips label-flow"><svg class="label-tints" aria-hidden="true"></svg>${chipsHtml
             || `<span class="zone-hint">${loading ? '' : q && others.length ? 'No projects match your search.' : ''}</span>`}
             <button type="button" id="newProjectBtn" class="new-pick">+ New project</button></div>
         </div>
@@ -527,12 +678,12 @@
 `;
     drawEditChip();
     drawSideNav();
+    drawLabelTints();
     const chart = el.querySelector('.combo-chart');
     ovProjects = shown.map(p => ({
       key: keyOf(p), name: p.name || 'Untitled', color: barColorOf(p), label: labelOf(p)?.name || '',
       tasks: p.data && Array.isArray(p.data.tasks) ? p.data.tasks : [], groupColors: (p.data && p.data.groupColors) || {},
     }));
-    if (collapsed) return;
     if (loading || failed) {
       chart.innerHTML = `<p class="home-note">${loading ? 'Loading…' : 'Your online projects couldn\'t be loaded. Check your connection and reload the page.'}</p>`;
       return;
@@ -675,6 +826,7 @@
   // for its menu. (Pointer events, so it works with a finger too.)
   let chipDrag = null; // { chip, key, x, y, held, timer } while a chip is pressed
   const chipAt = e => !e.target.closest?.('.project-dot-wrap') && e.target.closest?.('#homeMain .pick[data-key], .edit-chip[data-key]'); // (not its colour dot)
+  let chipClickTimer = null; // (a single click on All projects, waiting to see if it's a double-click)
   const nameEditing = () => nameEl.isContentEditable;
   document.addEventListener('pointerdown', e => {
     const chip = chipAt(e);
@@ -716,10 +868,21 @@
     const pen = e.target.closest?.('#homeMain .pick-edit'); // the pen / eye: into the editor
     if (pen) return moveChip(pen.dataset.key, 'edit');
     const chip = chipAt(e);
-    if (chip && !chip.dataset.dragged && !nameEditing()) clickChip(chip);
+    if (!chip || chip.dataset.dragged || nameEditing() || renamingChip || e.target.isContentEditable) return;
+    if (chip.closest('#homeMain')) { // (on All projects: a double-click renames, so wait a moment)
+      clearTimeout(chipClickTimer);
+      if (e.detail > 1) return;
+      chipClickTimer = setTimeout(() => clickChip(chip), 240);
+      return;
+    }
+    clickChip(chip);
   });
   document.addEventListener('keydown', e => {
-    const chip = (e.key === 'Enter' || e.key === ' ') && !nameEditing() && e.target.matches?.('#homeMain .pick[data-key], .edit-chip[data-key]') && e.target;
+    if (e.key === 'F2' && e.target.matches?.('#homeMain .label-flow .pick[data-key]') && !renamingChip) { // F2: rename it
+      const p = comboList.find(x => keyOf(x) === e.target.dataset.key);
+      if (p && p.kind !== 'shared') { e.preventDefault(); return editInPlace(e.target.querySelector('.pick-name'), name => renameProject(p.id && keyOf(p), name)); }
+    }
+    const chip = (e.key === 'Enter' || e.key === ' ') && !nameEditing() && !renamingChip && e.target.matches?.('#homeMain .pick[data-key], .edit-chip[data-key]') && e.target;
     if (!chip) return;
     e.preventDefault();
     clickChip(chip);

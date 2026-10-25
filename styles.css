@@ -1169,7 +1169,7 @@
   .ov-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: none; background: none;
                color: var(--text); font-size: 14px; font-weight: 700; }
   .ov-toggle .chev { color: var(--muted); }
-  .overview.collapsed .combo-chart { display: none; }
+  .overview.collapsed .overview-chips { display: none; } /* (folded: just the chips; the timeline stays) */
   .overview.collapsed .overview-bar { margin-bottom: 0; }
   .edit-slot { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 80px; margin-top: 18px;
                border: 1.5px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 14px; }
@@ -1214,7 +1214,6 @@
   .ov-tools { display: flex; gap: 6px; align-items: center; padding: 6px 0 8px; }
   .ov-tools button { padding: 4px 12px; font-size: 13px; }
   .ov-tools .ov-fit.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  .overview.collapsed .ov-tools { display: none; }
 
   /* The pen (or eye) on a chip: opens the project in the editor */
   .pick .pick-edit { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
@@ -1638,3 +1637,40 @@
   .home-tip .tip-close { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 28px; height: 28px; padding: 0;
                          border: none; border-radius: 999px; background: none; color: var(--muted); }
   .home-tip .tip-close:hover { background: var(--panel); color: var(--text); }
+
+  /* ---- All projects: chips grouped by label ----
+     A white label chip (its colour dot, its name) leads its projects; the group sits on a
+     soft tint of the label's colour, one rounded block per line. Projects without a
+     label come after, on their own. Chips have no border: just a light background
+     (light grey when the project isn't shown in the timeline). */
+  .overview-chips.label-flow { position: relative; gap: 16px 0; }
+  .label-tints { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+  .label-flow .keep { display: inline-flex; flex-wrap: nowrap; align-items: center; }
+  .label-flow .pick, .label-flow .label-chip, .label-flow .new-pick { position: relative; z-index: 1; }
+  .label-flow .pick { height: 30px; margin-right: 6px; padding: 0 4px 0 13px; border: none; background: color-mix(in srgb, var(--label) 24%, var(--panel)); color: var(--text); }
+  .label-flow .pick.on:hover { border: none; background: color-mix(in srgb, var(--label) 34%, var(--panel)); }
+  .label-flow .pick:not(.on) { border: none; background: color-mix(in srgb, var(--muted) 13%, var(--panel)); color: var(--muted); }
+  .label-flow .pick:not(.on):hover { background: color-mix(in srgb, var(--muted) 20%, var(--panel)); }
+  .label-flow .pick.lg-last { margin-right: 26px; }
+  .label-flow .pick.on.hl { box-shadow: 0 0 0 2px color-mix(in srgb, var(--label) 60%, transparent); }
+  .label-flow .pick-name[contenteditable="plaintext-only"] { overflow: visible; outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; background: var(--panel); padding: 0 3px; cursor: text; }
+  .label-chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; margin-right: 6px; padding: 0 12px 0 10px; border-radius: 999px; background: var(--panel);
+                box-shadow: 0 1px 3px rgba(31, 29, 58, .13); font-size: 13.5px; font-weight: 800; white-space: nowrap; color: color-mix(in srgb, var(--label) 65%, var(--text)); }
+  .label-dot { flex: none; width: 12px; height: 12px; padding: 0; border: none; border-radius: 50%; background: var(--label); cursor: pointer; }
+  .label-dot:hover, .label-dot:focus-visible { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); outline: none; }
+  .label-name { padding: 1px 3px; margin: 0 -3px; border-radius: 4px; cursor: text; }
+  .label-name:hover { background: var(--weekend); }
+  .label-name[contenteditable="plaintext-only"] { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--panel); color: var(--text); }
+  .label-color-pop { position: fixed; z-index: 60; }
+  .label-flow .new-pick { margin-left: 0; }
+  .ov-count { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  /* The sidebar's projects, grouped by label */
+  .side-group { margin: 0 0 6px; }
+  .side-group:not(.side-loose) { padding: 2px 0 4px; border-radius: 6px; background: color-mix(in srgb, var(--label) 9%, transparent); }
+  .side-label { display: flex; align-items: center; gap: 7px; padding: 6px 10px 3px; font-size: 11.5px; font-weight: 800;
+                color: color-mix(in srgb, var(--label) 65%, var(--text)); }
+  .side-label i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--label); }
+  .side-group .side-proj { padding-left: 14px; }
+  .side-loose.after { padding-top: 6px; border-top: 1px solid var(--line); }
+  .side-loose .side-proj { padding-left: 10px; }
+  #colorReset.on { color: var(--text); text-decoration: none; font-weight: 700; cursor: default; }
