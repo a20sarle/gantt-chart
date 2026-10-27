@@ -1797,3 +1797,12 @@
   .sheet-dur-row { display: inline-flex; gap: 6px; }
   .sheet-dur { width: 60px; font-size: 14px; text-align: right; }
   .sheet-dur-unit { font-size: 14px; }
+
+  /* An activity group has changed: bring the changes into this project? */
+  .pu-list { margin: 0 0 16px; padding: 0; list-style: none; font-size: 13.5px; }
+  .pu-list li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .pu-list li b { width: 14px; text-align: center; }
+  .pu-list small { margin-left: auto; color: var(--muted); }
+  .pu-add b { color: #3f9f7a; }
+  .pu-del { color: var(--muted); }
+  .pu-del b { color: var(--today); }

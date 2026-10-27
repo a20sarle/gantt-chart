@@ -95,7 +95,7 @@
           <i aria-hidden="true"></i><span>${esc(p.name)}</span><small>${countOf(p)}</small></button>`).join('')}
       ${state === 'ok' ? '<button type="button" class="preset-new side-link side-new">+ New activity group</button>' : ''}`;
   }
-  window.drawPresets = drawShelf; // (collab.js: your activity groups have loaded)
+  window.drawPresets = () => { drawShelf(); offerSoon(); }; // (collab.js: your activity groups or the project have loaded)
 
   // ---- Placing an activity group: each key date on its day (day numbers) ----
   function freeGroup(base) {
@@ -104,25 +104,36 @@
     for (let i = 2; used.has(name); i++) name = `${base} ${i}`;
     return name;
   }
+  // Every key date and activity in a group (their ids)
+  const allIds = p => p.sections.flatMap(s => [s.key.id, ...s.items.map(it => it.id)]);
+  // A task for a key date or an activity, on its day. "from" remembers where it came from
+  // (the activity group, this placement of it, which one it is, and everything placed),
+  // so changes to the activity group can be brought in later.
+  function keyTask(p, s, keyDay, group, from) {
+    return { // the key date: a ◆ milestone (unless switched off), with the group's links
+      id: uid(), name: s.key.name, group, start: dayString(keyDay), end: dayString(endOf(keyDay, s.key.len, s.key.lenUnit)),
+      milestone: keyMs(s), done: false, after: [], links: (p.links || []).map(l => ({ url: l.url })),
+      subtasks: (s.key.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
+      from: { ...from, i: s.key.id },
+    };
+  }
+  function itemTask(it, keyDay, group, from) {
+    const start = startOf(it, keyDay);
+    return {
+      id: uid(), name: it.name, group, start: dayString(start), end: dayString(endOf(start, it.len, it.lenUnit)),
+      milestone: it.milestone || '', done: false, after: [], links: [],
+      subtasks: (it.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
+      from: { ...from, i: it.id },
+    };
+  }
   function placePreset(p, keyDays) {
     if (readOnly || !p.sections.length) return;
     const group = freeGroup(p.name);
+    const from = { p: p.id, x: uid(), ids: allIds(p) };
     const made = [];
     p.sections.forEach((s, si) => {
-      const keyDay = keyDays[si];
-      made.push({ // the key date: a ◆ milestone (unless switched off), with the group's links
-        id: uid(), name: s.key.name, group, start: dayString(keyDay), end: dayString(endOf(keyDay, s.key.len, s.key.lenUnit)),
-        milestone: keyMs(s), done: false, after: [], links: (p.links || []).map(l => ({ url: l.url })),
-        subtasks: (s.key.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
-      });
-      for (const it of s.items) {
-        const start = startOf(it, keyDay);
-        made.push({
-          id: uid(), name: it.name, group, start: dayString(start), end: dayString(endOf(start, it.len, it.lenUnit)),
-          milestone: it.milestone || '', done: false, after: [], links: [],
-          subtasks: (it.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
-        });
-      }
+      made.push(keyTask(p, s, keyDays[si], group, from));
+      for (const it of s.items) made.push(itemTask(it, keyDays[si], group, from));
     });
     tasks.push(...made);
     if (groupColorOf(p.color)) groupColors[group] = p.color;
@@ -166,6 +177,88 @@
     if (p.sections.length > 1) return askOtherKeyDates(p, firstDay);
     placePreset(p, [firstDay]);
   }
+
+  // ---- Bringing changes to an activity group into the projects that use it ----
+  // When an activity group you've placed gets activities or key dates added or removed,
+  // the project asks (on saving the group, and on opening the project) whether to bring
+  // in just those: new ones are added around their key date, removed ones are taken out.
+  // Everything else in the placed group (dates you moved, subtasks, links, comments) stays.
+  const DECLINED_KEY = 'worknest-preset-declined';
+  const declined = () => { try { return JSON.parse(localStorage.getItem(DECLINED_KEY)) || []; } catch { return []; } };
+  const changeKey = (x, ids) => `${x}|${ids.join(',')}`;
+  function changesFor(p, x) {
+    const placed = tasks.filter(t => t.from?.x === x);
+    if (!placed.length) return null;
+    const had = new Set(placed[0].from.ids || []), now = allIds(p);
+    const group = placed[0].group;
+    const from = { p: p.id, x, ids: now };
+    const dayOf = id => { const t = placed.find(t => t.from.i === id); return t ? dayNumber(parse(t.start)) : null; };
+    const firstDay = dayOf(p.sections[0].key.id);
+    const added = [];
+    p.sections.forEach((s, si) => {
+      let keyDay = dayOf(s.key.id);
+      if (!had.has(s.key.id)) { // a new key date: as far from the first as last time
+        if (firstDay === null) return;
+        keyDay = suggestedDay(p, si, firstDay);
+        added.push(keyTask(p, s, keyDay, group, from));
+      }
+      if (keyDay === null) return; // (its key date was deleted from the project)
+      for (const it of s.items) if (!had.has(it.id)) added.push(itemTask(it, keyDay, group, from));
+    });
+    const removed = placed.filter(t => !now.includes(t.from.i));
+    return { group, now, added, removed };
+  }
+  const update = document.createElement('dialog');
+  update.className = 'preset-ask preset-update';
+  document.body.append(update);
+  let asking = false;
+  async function offerUpdates(onlyFor) {
+    if (readOnly || asking || storeState() !== 'ok') return;
+    const presets = list();
+    const xs = [...new Set(tasks.filter(t => t.from?.x && (!onlyFor || t.from.p === onlyFor)).map(t => t.from.x))];
+    for (const x of xs) {
+      const p = presets.find(q => q.id === tasks.find(t => t.from?.x === x).from.p);
+      if (!p) continue; // (the activity group was deleted: its places stay as they are)
+      const ch = changesFor(p, x);
+      if (!ch || (!ch.added.length && !ch.removed.length) || declined().includes(changeKey(x, ch.now))) continue;
+      asking = true;
+      const yes = await askUpdate(p, ch);
+      asking = false;
+      if (yes) applyUpdate(x, ch);
+      else {
+        const d = declined().filter(k => !k.startsWith(`${x}|`));
+        try { localStorage.setItem(DECLINED_KEY, JSON.stringify([...d, changeKey(x, ch.now)].slice(-200))); } catch {}
+      }
+    }
+  }
+  function askUpdate(p, ch) {
+    const day = t => longDay(dayNumber(parse(t.start)));
+    update.innerHTML = `<form method="dialog">
+        <h2>${esc(p.name)} has changed</h2>
+        <p>Update <b>${esc(ch.group || p.name)}</b> in this project? Only these changes are made: everything else in it stays as it is.</p>
+        <ul class="pu-list">
+          ${ch.added.map(t => `<li class="pu-add"><b>+</b> ${t.milestone ? '◆ ' : ''}${esc(t.name)} <small>${day(t)}</small></li>`).join('')}
+          ${ch.removed.map(t => `<li class="pu-del"><b>−</b> ${esc(t.name)} <small>removed from the activity group</small></li>`).join('')}
+        </ul>
+        <div class="actions reverse"><button value="ok" class="primary">Update</button><button value="no">Keep as it is</button></div>
+      </form>`;
+    update.returnValue = '';
+    update.showModal();
+    return new Promise(res => update.addEventListener('close', () => res(update.returnValue === 'ok'), { once: true }));
+  }
+  function applyUpdate(x, ch) {
+    const gone = new Set(ch.removed.map(t => t.id));
+    tasks = tasks.filter(t => !gone.has(t.id));
+    tasks.forEach(t => {
+      if (t.after) t.after = t.after.filter(a => !gone.has(a)); // (links to removed ones)
+      if (t.from?.x === x) t.from = { ...t.from, ids: ch.now };
+    });
+    tasks.push(...ch.added);
+    save(); render();
+  }
+  // (on opening a project, once its tasks and your activity groups are both there)
+  let offerTimer = null;
+  const offerSoon = () => { clearTimeout(offerTimer); offerTimer = setTimeout(() => offerUpdates(), 300); };
 
   // ---- Dragging an activity group onto the chart ----
   let press = null; // { preset, x, y, chip, dragging, day }
@@ -424,7 +517,11 @@
       body.querySelector(`.pe-keyrow[data-s="${draft.sections.length - 1}"] .pe-kname`)?.select();
       return;
     }
-    if (t.closest('.pe-save')) { if (await saveDraft()) dlg.close(); return; }
+    if (t.closest('.pe-save')) {
+      const id = draft.id;
+      if (await saveDraft()) { dlg.close(); if (id) offerUpdates(id); }
+      return;
+    }
     if (t.closest('.pe-place-btn')) {
       const days = [...body.querySelectorAll('.pe-date')].map(inp => inp.value ? dayNumber(parse(inp.value)) : null);
       if (days.some(d => d === null)) return showError(`Choose the key date${days.length > 1 ? 's' : ''} first.`);
@@ -565,4 +662,5 @@
   }
 
   drawShelf();
+  offerSoon(); // (a project on this computer: its tasks are already there)
 })();

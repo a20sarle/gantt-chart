@@ -1516,6 +1516,7 @@ document.getElementById('importFile').onchange = async e => {
       after: Array.isArray(t.after) ? t.after.map(String) : [],
       links: cleanLinks(t.links),
       subtasks: Array.isArray(t.subtasks) ? t.subtasks.map(s => ({ id: s.id || uid(), name: String(s.name), done: !!s.done, links: cleanLinks(s.links) })) : [],
+      ...(t.from && typeof t.from === 'object' ? { from: t.from } : {}), // (placed from an activity group)
     }));
     save(); render();
   } catch { alert('Could not read that file.'); }
