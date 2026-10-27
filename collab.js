@@ -1421,6 +1421,46 @@
       state: () => labelsState,
       list: () => mine.presets || [],
       save: async list => { mine.presets = list; await saveMine(); },
+      // Your own projects, on this computer and online (not those shared with you):
+      // [{ kind: 'local' | 'online', id, name, data: { tasks, groupColors, … } }]
+      async projects() {
+        const local = listLocal().map(p => ({ kind: 'local', id: p.id, name: p.name, data: readLocal(p.id) }));
+        let online = [];
+        try {
+          online = (await cloud.listProjects(user.email)).filter(p => p.mine).map(p => {
+            let data = {};
+            try { data = JSON.parse(p.data || '{}'); } catch {}
+            return { kind: 'online', id: p.id, name: p.name, data };
+          });
+        } catch (err) { console.error(err); }
+        // (with unsaved changes kept from last time: those, and they stay unsaved)
+        return [...local, ...online].map(p => {
+          const draftKey = `${TEST_MODE ? 'worknest-test:' : ''}worknest-draft:${p.kind === 'online' ? `p:${p.id}` : `local:${p.id}`}`;
+          const d = readJson(draftKey);
+          if (!d || typeof d.state !== 'string') return p;
+          try { return { ...p, draftKey, draft: d, data: JSON.parse(d.state) }; } catch { return p; }
+        }).filter(p => p.data && Array.isArray(p.data.tasks));
+      },
+      // Saves one of them (its tasks changed)
+      async saveProject(p) {
+        if (p.draft) return localStorage.setItem(p.draftKey, JSON.stringify({ ...p.draft, state: JSON.stringify(p.data) }));
+        if (p.kind === 'local') return writeLocal(p.id, p.data);
+        await cloud.saveProject(p.id, { data: JSON.stringify(p.data) });
+      },
+      // How many comments each of a project's tasks has ({ task id: count })
+      commentCounts(p) {
+        if (p.kind !== 'online') return Promise.resolve({});
+        return new Promise(res => {
+          let stop = null;
+          setTimeout(() => res({}), 5000); // (no answer: none known)
+          stop = cloud.watchComments(p.id, list => {
+            const n = {};
+            for (const x of list) n[x.taskId] = (n[x.taskId] || 0) + 1;
+            res(n);
+            setTimeout(() => stop?.(), 0);
+          }, () => res({}));
+        });
+      },
     } : null,
     // The open project was saved: its chip and bars on All projects take its colour
     colorSaved(color) {

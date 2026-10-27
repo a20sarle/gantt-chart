@@ -11,8 +11,8 @@
 // An activity group: { id, name, color (a PALETTE index or a hex code), links: [{ url }],
 //   sections: [{ id, key: { id, name, len, lenUnit }, items: [{ id, name, side
 //   ('before' | 'after' the key date), n, unit ('days' | 'weeks' | 'months': how far
-//   from the key date it starts), len, lenUnit (how long it lasts), milestone,
-//   subtasks (names) }] }], gaps: { <section id>: days after the first key date, as
+//   from the key date it starts), len, lenUnit (how long it lasts), milestone, notes,
+//   subtasks: [{ id, name }] }] }], gaps: { <section id>: days after the first key date, as
 //   last placed } }
 // Every day counts (weekends too); months follow the calendar.
 (() => {
@@ -41,10 +41,13 @@
   // Activity groups saved before there were several key dates: one key date (their old
   // key activity), the others before or after it in days
   function normalize(p) {
-    if (Array.isArray(p.sections)) return { links: [], gaps: {}, ...p };
+    if (Array.isArray(p.sections)) {
+      const subs = x => ({ ...x, subtasks: (x.subtasks || []).map((s, n) => typeof s === 'string' ? { id: `${x.id}~${n}`, name: s } : s) });
+      return { links: [], gaps: {}, ...p, sections: p.sections.map(s => ({ ...s, key: subs(s.key), items: s.items.map(subs) })) };
+    }
     const items = Array.isArray(p.items) ? p.items : [];
     const key = items.find(it => it.key) || items[0] || { id: uid(), name: 'Event', len: 1 };
-    return {
+    return normalize({
       id: p.id, name: p.name, color: p.color, links: [], gaps: {},
       sections: [{
         id: uid(),
@@ -54,7 +57,7 @@
           len: Math.max(1, it.len || 1), lenUnit: 'days', milestone: it.milestone || '', subtasks: it.subtasks || [],
         })),
       }],
-    };
+    });
   }
 
   const colorOf = p => groupColorOf(p.color) || PALETTE[0];
@@ -106,27 +109,38 @@
   }
   // Every key date and activity in a group (their ids)
   const allIds = p => p.sections.flatMap(s => [s.key.id, ...s.items.map(it => it.id)]);
+  // A short fingerprint of a value (to tell later whether it's still what the group gave)
+  const fpOf = v => { const s = JSON.stringify(v ?? ''); let x = 0x811c9dc5; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return (x >>> 0).toString(36); };
+  const lenOf = t => daysBetween(parse(t.start), parse(t.end)) + 1;
+  // What a task got from its group, as fingerprints, field by field ("start": how many days
+  // from its key date, so moving the whole group doesn't count as a change)
+  const givenOf = (t, keyDay) => ({
+    name: fpOf(t.name), start: fpOf(dayNumber(parse(t.start)) - keyDay), len: fpOf(lenOf(t)), ms: fpOf(t.milestone || ''),
+    notes: fpOf(t.notes || ''), links: (t.links || []).map(l => fpOf(l.url)),
+  });
+  const placedSubs = list => (list || []).map((s, i) => ({ id: uid(), no: i + 1, name: s.name, done: false, from: s.id, fp: fpOf(s.name) }));
   // A task for a key date or an activity, on its day. "from" remembers where it came from
-  // (the activity group, this placement of it, which one it is, and everything placed),
-  // so changes to the activity group can be brought in later.
+  // (the activity group, this placement of it, which one it is, its key date, everything
+  // placed, and what it got), so changes to the activity group can be brought in later
+  // without touching what's been changed or added in the project.
   function keyTask(p, s, keyDay, group, from) {
-    return { // the key date: a ◆ milestone (unless switched off), with the group's links
+    const t = { // the key date: a ◆ milestone (unless switched off), with the group's links
       id: uid(), name: s.key.name, group, start: dayString(keyDay), end: dayString(endOf(keyDay, s.key.len, s.key.lenUnit)),
       milestone: keyMs(s), done: false, after: [], links: (p.links || []).map(l => ({ url: l.url })),
-      subtasks: (s.key.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
-      notes: s.key.notes || '',
-      from: { ...from, i: s.key.id },
+      subtasks: placedSubs(s.key.subtasks), notes: s.key.notes || '',
     };
+    t.from = { ...from, i: s.key.id, k: s.key.id, fp: givenOf(t, keyDay), subs: (s.key.subtasks || []).map(x => x.id) };
+    return t;
   }
-  function itemTask(it, keyDay, group, from) {
+  function itemTask(it, keyDay, group, from, keyId) {
     const start = startOf(it, keyDay);
-    return {
+    const t = {
       id: uid(), name: it.name, group, start: dayString(start), end: dayString(endOf(start, it.len, it.lenUnit)),
       milestone: it.milestone || '', done: false, after: [], links: [],
-      subtasks: (it.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
-      notes: it.notes || '',
-      from: { ...from, i: it.id },
+      subtasks: placedSubs(it.subtasks), notes: it.notes || '',
     };
+    t.from = { ...from, i: it.id, k: keyId, fp: givenOf(t, keyDay), subs: (it.subtasks || []).map(x => x.id) };
+    return t;
   }
   function placePreset(p, keyDays) {
     if (readOnly || !p.sections.length) return;
@@ -135,7 +149,7 @@
     const made = [];
     p.sections.forEach((s, si) => {
       made.push(keyTask(p, s, keyDays[si], group, from));
-      for (const it of s.items) made.push(itemTask(it, keyDays[si], group, from));
+      for (const it of s.items) made.push(itemTask(it, keyDays[si], group, from, s.key.id));
     });
     tasks.push(...made);
     if (groupColorOf(p.color)) groupColors[group] = p.color;
@@ -181,82 +195,244 @@
   }
 
   // ---- Bringing changes to an activity group into the projects that use it ----
-  // When an activity group you've placed gets activities or key dates added or removed,
-  // the project asks (on saving the group, and on opening the project) whether to bring
-  // in just those: new ones are added around their key date, removed ones are taken out.
-  // Everything else in the placed group (dates you moved, subtasks, links, comments) stays.
+  // When an activity group you've placed changes, the project asks (on saving the group,
+  // and on opening the project) whether to bring the changes in. Field by field, a task
+  // only gets the group's new value when it still has what the group gave it (its
+  // fingerprint matches): whatever's been changed in the project stays ("kept yours").
+  // New activities / key dates / subtasks / links are added; removed ones are taken out,
+  // except tasks with work on them (done, a subtask done, comments), and subtasks that are
+  // done or have links.
+  // What's been added in the project (tasks, subtasks, links, comments) is never touched.
   const DECLINED_KEY = 'worknest-preset-declined';
   const declined = () => { try { return JSON.parse(localStorage.getItem(DECLINED_KEY)) || []; } catch { return []; } };
-  const changeKey = (x, ids) => `${x}|${ids.join(',')}`;
-  function changesFor(p, x) {
-    const placed = tasks.filter(t => t.from?.x === x);
+  const changeKey = (x, p) => `${x}|${fpOf([p.sections, p.links])}`;
+  const shortDay = n => new Date(n * DAY).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const msWord = m => m === 'start' ? 'a milestone at the start' : m === 'end' ? 'a milestone at the end' : 'no milestone';
+
+  // One task: field by field (t is changed in place: it's a copy until you click Update)
+  function syncTask(t, e, keyDay, isKey) {
+    const fp = t.from.fp || {}; // (placed before fingerprints: unknown, so only what still matches is "the group's")
+    const known = !!t.from.fp;
+    const done = [], kept = [];
+    const field = (name, cur, want, apply, label, keptLabel) => {
+      const g = fpOf(want);
+      const was = known ? fp[name] : fpOf(cur) === g ? g : null;
+      if (was === g) return;                  // (the group didn't change it)
+      if (was != null && fpOf(cur) === was) { apply(); done.push(label); }
+      else if (known && fpOf(cur) !== g) kept.push(keptLabel);
+      fp[name] = g;
+    };
+    field('name', t.name, e.name, () => { t.name = e.name; }, `renamed “${esc(e.name)}”`, 'its name');
+    if (!isKey) {
+      const want = dayNumber(parse(e.start)) - keyDay;
+      field('start', dayNumber(parse(t.start)) - keyDay, want, () => {
+        const len = lenOf(t), s = keyDay + want;
+        t.start = dayString(s); t.end = dayString(s + len - 1);
+      }, `starts ${shortDay(keyDay + want)}`, 'its dates');
+    }
+    field('len', lenOf(t), lenOf(e), () => { t.end = dayString(dayNumber(parse(t.start)) + lenOf(e) - 1); },
+      `lasts ${lenOf(e)} day${lenOf(e) > 1 ? 's' : ''}`, 'how long it lasts');
+    field('ms', t.milestone || '', e.milestone || '', () => { t.milestone = e.milestone || ''; }, msWord(e.milestone), 'its milestone');
+    field('notes', t.notes || '', e.notes || '', () => { t.notes = e.notes || ''; }, 'new notes', 'its notes');
+    if (isKey) { // the group's links: new ones added, removed ones taken out (links added in the project stay)
+      const had = new Set(known ? fp.links || [] : (t.links || []).map(l => fpOf(l.url)));
+      const now = (e.links || []).map(l => fpOf(l.url));
+      const add = e.links.filter(l => !had.has(fpOf(l.url)) && !(t.links || []).some(x => x.url === l.url));
+      const gone = new Set(known ? [...had].filter(f => !now.includes(f)) : []); // (placed before: which links were the group's isn't known)
+      const before = (t.links || []).length;
+      t.links = [...(t.links || []).filter(l => !gone.has(fpOf(l.url))), ...add.map(l => ({ url: l.url }))];
+      if (add.length) done.push(add.length === 1 ? 'a link added' : `${add.length} links added`);
+      const removed = before + add.length - t.links.length;
+      if (removed) done.push(removed === 1 ? 'a link removed' : `${removed} links removed`);
+      fp.links = now;
+    }
+    // Subtasks, one by one
+    t.subtasks ||= [];
+    const given = new Set(t.from.subs || []);
+    let added = 0, removed = 0, renamed = 0, keptSubs = 0;
+    for (const es of e.subtasks) {
+      let ps = t.subtasks.find(s => s.from === es.from);
+      if (!ps && !t.from.subs) ps = t.subtasks.find(s => !s.from && s.name === es.name); // (placed before: by name)
+      if (ps && !ps.from) { ps.from = es.from; ps.fp = fpOf(ps.name); }
+      if (ps) {
+        const g = fpOf(es.name);
+        if (ps.fp !== g) {
+          if (fpOf(ps.name) === ps.fp) { ps.name = es.name; renamed++; } else keptSubs++;
+          ps.fp = g;
+        }
+      } else if (!given.has(es.from) && t.from.subs) { // (new in the group; one deleted in the project stays deleted)
+        t.subtasks.push({ ...es, id: uid(), no: Math.max(0, ...t.subtasks.map(s => s.no || 0)) + 1 });
+        added++;
+      }
+    }
+    const nowSubs = new Set(e.subtasks.map(s => s.from));
+    t.subtasks = t.subtasks.filter(s => {
+      if (!s.from || nowSubs.has(s.from)) return true;
+      if (s.done || (s.links || []).length) { delete s.from; delete s.fp; keptSubs++; return true; } // (work on it: stays, as the project's own)
+      removed++; return false;
+    });
+    if (added) done.push(added === 1 ? 'a subtask added' : `${added} subtasks added`);
+    if (renamed) done.push(renamed === 1 ? 'a subtask renamed' : `${renamed} subtasks renamed`);
+    if (removed) done.push(removed === 1 ? 'a subtask removed' : `${removed} subtasks removed`);
+    if (keptSubs) kept.push(keptSubs === 1 ? 'a subtask' : `${keptSubs} subtasks`);
+    t.from.fp = fp;
+    t.from.subs = e.subtasks.map(s => s.from);
+    return { done, kept };
+  }
+
+  // One placement of the group in a project's tasks (a list; tasks = the open project's).
+  // comments(task id): how many comments it has.
+  function changesFor(p, x, list = tasks, comments = id => window.collab?.count?.(id) || 0) {
+    const next = JSON.parse(JSON.stringify(list)); // (a copy: nothing changes until Update)
+    const placed = next.filter(t => t.from?.x === x);
     if (!placed.length) return null;
     const had = new Set(placed[0].from.ids || []), now = allIds(p);
     const group = placed[0].group;
-    const from = { p: p.id, x, ids: now };
+    const base = { p: p.id, x, ids: now };
+    const lines = []; // { kind: 'add' | 'del' | 'edit' | 'kept', name, text }
     const dayOf = id => { const t = placed.find(t => t.from.i === id); return t ? dayNumber(parse(t.start)) : null; };
     const firstDay = dayOf(p.sections[0].key.id);
-    const added = [];
     p.sections.forEach((s, si) => {
       let keyDay = dayOf(s.key.id);
       if (!had.has(s.key.id)) { // a new key date: as far from the first as last time
         if (firstDay === null) return;
         keyDay = suggestedDay(p, si, firstDay);
-        added.push(keyTask(p, s, keyDay, group, from));
+        const t = keyTask(p, s, keyDay, group, base);
+        next.push(t); lines.push({ kind: 'add', name: t.name, text: longDay(keyDay), ms: t.milestone });
+      } else if (keyDay !== null) {
+        const kt = placed.find(t => t.from.i === s.key.id);
+        const r = syncTask(kt, keyTask(p, s, keyDay, group, base), keyDay, true);
+        if (r.done.length) lines.push({ kind: 'edit', name: kt.name, text: r.done.join(', ') });
+        if (r.kept.length) lines.push({ kind: 'kept', name: kt.name, text: `kept your change to ${r.kept.join(', ')}` });
       }
       if (keyDay === null) return; // (its key date was deleted from the project)
-      for (const it of s.items) if (!had.has(it.id)) added.push(itemTask(it, keyDay, group, from));
+      for (const it of s.items) {
+        const e = itemTask(it, keyDay, group, base, s.key.id);
+        if (!had.has(it.id)) { next.push(e); lines.push({ kind: 'add', name: e.name, text: longDay(dayNumber(parse(e.start))), ms: e.milestone }); continue; }
+        const t = placed.find(t => t.from.i === it.id);
+        if (!t) continue; // (deleted in the project: stays deleted)
+        const r = syncTask(t, e, keyDay, false);
+        if (r.done.length) lines.push({ kind: 'edit', name: t.name, text: r.done.join(', ') });
+        if (r.kept.length) lines.push({ kind: 'kept', name: t.name, text: `kept your change to ${r.kept.join(', ')}` });
+      }
     });
-    const removed = placed.filter(t => !now.includes(t.from.i));
-    return { group, now, added, removed };
+    // Removed from the group: taken out, unless there's work on them (done, a subtask done, or comments)
+    const gone = new Set();
+    for (const t of placed.filter(t => !now.includes(t.from.i))) {
+      const why = t.done ? 'done' : (t.subtasks || []).some(s => s.done) ? 'a subtask is done' : comments(t.id) ? 'it has comments' : '';
+      if (why) {
+        delete t.from; // (it's the project's own now)
+        lines.push({ kind: 'kept', name: t.name, text: `removed from the activity group, but kept here (${why})` });
+      } else { gone.add(t.id); lines.push({ kind: 'del', name: t.name, text: 'removed from the activity group' }); }
+    }
+    const result = next.filter(t => !gone.has(t.id));
+    result.forEach(t => {
+      if (t.after) t.after = t.after.filter(a => !gone.has(a)); // (links to removed ones)
+      if (t.from?.x === x) t.from.ids = now;
+    });
+    return { group, lines, tasks: result, real: lines.some(l => l.kind !== 'kept') };
   }
   const update = document.createElement('dialog');
   update.className = 'preset-ask preset-update';
   document.body.append(update);
   let asking = false;
+  // All of a project's placements of the group, one after the other
+  function projectChanges(p, list, comments) {
+    const xs = [...new Set(list.filter(t => t.from?.x && t.from.p === p.id).map(t => t.from.x))];
+    let lines = [], real = false;
+    for (const x of xs) {
+      const ch = changesFor(p, x, list, comments);
+      if (!ch || !ch.real) continue;
+      list = ch.tasks; real = true;
+      lines = [...lines, ...(xs.length > 1 ? [{ kind: 'group', name: ch.group }] : []), ...ch.lines];
+    }
+    return { tasks: list, lines, real, xs };
+  }
+  const isOpen = q => q.kind === 'local' ? q.id === LOCAL_ID : q.id === ONLINE_ID;
+  // Saving an activity group: which of your projects use it, and what would change in each.
+  // You tick the ones to update (all are ticked); the others aren't asked about this again.
+  async function offerEverywhere(groupId) {
+    const a = api(), p = list().find(q => q.id === groupId);
+    if (!p || asking) return;
+    asking = true;
+    try {
+      const found = [];
+      if (!readOnly && (LOCAL_ID || ONLINE_ID) && tasks.some(t => t.from?.p === p.id)) {
+        const ch = projectChanges(p, tasks, id => window.collab?.count?.(id) || 0);
+        if (ch.real) found.push({ name: projectName, open: true, ch });
+      }
+      for (const q of a ? await a.projects() : []) {
+        if (isOpen(q) || !q.data.tasks.some(t => t.from?.p === p.id)) continue;
+        const counts = await a.commentCounts(q);
+        const ch = projectChanges(p, q.data.tasks, id => counts[id] || 0);
+        if (ch.real) found.push({ name: q.name, q, ch, unsaved: !!q.draft });
+      }
+      if (!found.length) return;
+      const chosen = await askProjects(p, found);
+      for (const [i, f] of found.entries()) {
+        if (chosen.includes(i)) {
+          if (f.open) { tasks = f.ch.tasks; save(); render(); }
+          else { f.q.data = { ...f.q.data, tasks: f.ch.tasks }; await a.saveProject(f.q); }
+        } else {
+          const d = declined().filter(k => !f.ch.xs.some(x => k.startsWith(`${x}|`)));
+          try { localStorage.setItem(DECLINED_KEY, JSON.stringify([...d, ...f.ch.xs.map(x => changeKey(x, p))].slice(-200))); } catch {}
+        }
+      }
+    } finally { asking = false; }
+  }
+  const sign = { add: '+', del: '−', edit: '✎', kept: '•' };
+  const lineHtml = l => l.kind === 'group' ? `<li class="pu-group">${esc(l.name)}</li>`
+    : `<li class="pu-${l.kind}"><b>${sign[l.kind]}</b><span>${l.ms ? '◆ ' : ''}${esc(l.name)}</span><small>${l.kind === 'edit' ? l.text : esc(l.text)}</small></li>`;
+  function askProjects(p, found) {
+    update.innerHTML = `<form method="dialog">
+        <h2>${esc(p.name)} has changed</h2>
+        <p>${found.length > 1 ? `${found.length} of your projects use it.` : 'One of your projects uses it.'} Tick the ones to update: only these changes are made, and what's been changed or added in a project stays as it is.</p>
+        <div class="pu-projects">${found.map((f, i) => `<details class="pu-project">
+            <summary><input type="checkbox" checked data-i="${i}" aria-label="Update ${esc(f.name)}"><b>${esc(f.name)}</b>${f.open ? ' <small>(open)</small>' : f.unsaved ? ' <small>(has unsaved changes: updated along with them)</small>' : ''}
+              <span class="pu-count">${f.ch.lines.filter(l => l.kind !== 'kept' && l.kind !== 'group').length} change${f.ch.lines.filter(l => l.kind !== 'kept' && l.kind !== 'group').length === 1 ? '' : 's'}</span></summary>
+            <ul class="pu-list">${f.ch.lines.map(lineHtml).join('')}</ul>
+          </details>`).join('')}</div>
+        <div class="actions reverse"><button value="ok" class="primary">Update the ticked projects</button><button value="no">Not now</button></div>
+      </form>`;
+    update.returnValue = '';
+    update.querySelector('details')?.setAttribute('open', '');
+    // (ticking a box doesn't fold its project open or shut)
+    update.querySelectorAll('summary input').forEach(cb => cb.addEventListener('click', e => e.stopPropagation()));
+    update.showModal();
+    return new Promise(res => update.addEventListener('close', () => res(update.returnValue === 'ok'
+      ? [...update.querySelectorAll('summary input:checked')].map(cb => +cb.dataset.i) : []), { once: true }));
+  }
   async function offerUpdates(onlyFor) {
     if (readOnly || asking || storeState() !== 'ok') return;
     const presets = list();
     const xs = [...new Set(tasks.filter(t => t.from?.x && (!onlyFor || t.from.p === onlyFor)).map(t => t.from.x))];
     for (const x of xs) {
-      const p = presets.find(q => q.id === tasks.find(t => t.from?.x === x).from.p);
+      const p = presets.find(q => q.id === tasks.find(t => t.from?.x === x)?.from.p);
       if (!p) continue; // (the activity group was deleted: its places stay as they are)
       const ch = changesFor(p, x);
-      if (!ch || (!ch.added.length && !ch.removed.length) || declined().includes(changeKey(x, ch.now))) continue;
+      if (!ch || !ch.real || declined().includes(changeKey(x, p))) continue;
       asking = true;
       const yes = await askUpdate(p, ch);
       asking = false;
-      if (yes) applyUpdate(x, ch);
+      if (yes) { tasks = ch.tasks; save(); render(); }
       else {
         const d = declined().filter(k => !k.startsWith(`${x}|`));
-        try { localStorage.setItem(DECLINED_KEY, JSON.stringify([...d, changeKey(x, ch.now)].slice(-200))); } catch {}
+        try { localStorage.setItem(DECLINED_KEY, JSON.stringify([...d, changeKey(x, p)].slice(-200))); } catch {}
       }
     }
   }
   function askUpdate(p, ch) {
-    const day = t => longDay(dayNumber(parse(t.start)));
     update.innerHTML = `<form method="dialog">
         <h2>${esc(p.name)} has changed</h2>
-        <p>Update <b>${esc(ch.group || p.name)}</b> in this project? Only these changes are made: everything else in it stays as it is.</p>
+        <p>Update <b>${esc(ch.group || p.name)}</b> in this project? Only these changes are made: what's been changed or added in the project stays as it is.</p>
         <ul class="pu-list">
-          ${ch.added.map(t => `<li class="pu-add"><b>+</b> ${t.milestone ? '◆ ' : ''}${esc(t.name)} <small>${day(t)}</small></li>`).join('')}
-          ${ch.removed.map(t => `<li class="pu-del"><b>−</b> ${esc(t.name)} <small>removed from the activity group</small></li>`).join('')}
+          ${ch.lines.map(lineHtml).join('')}
         </ul>
         <div class="actions reverse"><button value="ok" class="primary">Update</button><button value="no">Keep as it is</button></div>
       </form>`;
     update.returnValue = '';
     update.showModal();
     return new Promise(res => update.addEventListener('close', () => res(update.returnValue === 'ok'), { once: true }));
-  }
-  function applyUpdate(x, ch) {
-    const gone = new Set(ch.removed.map(t => t.id));
-    tasks = tasks.filter(t => !gone.has(t.id));
-    tasks.forEach(t => {
-      if (t.after) t.after = t.after.filter(a => !gone.has(a)); // (links to removed ones)
-      if (t.from?.x === x) t.from = { ...t.from, ids: ch.now };
-    });
-    tasks.push(...ch.added);
-    save(); render();
   }
   // (on opening a project, once its tasks and your activity groups are both there)
   let offerTimer = null;
@@ -346,11 +522,11 @@
       id: null, name: g || 'New activity group', color: groupColors[g] ?? 0, links: [], gaps: {},
       sections: [{
         id: uid(),
-        key: { id: key.id, name: key.name, len: daysBetween(parse(key.start), parse(key.end)) + 1, lenUnit: 'days', milestone: key.milestone || '', subtasks: (key.subtasks || []).map(s => s.name), notes: key.notes || '' },
+        key: { id: key.id, name: key.name, len: daysBetween(parse(key.start), parse(key.end)) + 1, lenUnit: 'days', milestone: key.milestone || '', subtasks: (key.subtasks || []).map(s => ({ id: uid(), name: s.name })), notes: key.notes || '' },
         items: all.filter(t => t !== key).map(t => {
           const off = dayNumber(parse(t.start)) - keyDay;
           return { id: t.id, name: t.name, side: off < 0 ? 'before' : 'after', n: Math.abs(off), unit: 'days',
-            len: daysBetween(parse(t.start), parse(t.end)) + 1, lenUnit: 'days', milestone: t.milestone || '', subtasks: (t.subtasks || []).map(s => s.name), notes: t.notes || '' };
+            len: daysBetween(parse(t.start), parse(t.end)) + 1, lenUnit: 'days', milestone: t.milestone || '', subtasks: (t.subtasks || []).map(s => ({ id: uid(), name: s.name })), notes: t.notes || '' };
         }),
       }],
     }, { fromGroup: true });
@@ -380,12 +556,21 @@
     const on = ms === where, at = where === 'start' ? 'start' : 'end';
     return `<button type="button" class="pe-ms pe-ms-${at}${cls}${on ? ' on' : ''}" data-ms="${where}" title="${on ? `A milestone (◆) at the ${at}. Click to remove it` : `Put a milestone (◆) at the ${at}`}" aria-pressed="${on}">◆</button>`;
   };
-  // Notes and instructions for an activity: 📝 shows them under its row (they go onto the task)
+  // Notes and instructions and subtasks for an activity: 📝 shows them under its row (they
+  // go onto the task when the group is placed)
   const NOTE_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 3h9l4 4v14H6z M15 3v4h4 M9 12h7 M9 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const notesButton = (id, notes) => `<button type="button" class="pe-notes-btn${notes ? ' has' : ''}${notesOpen.has(id) ? ' open' : ''}" data-id="${id}"
-    title="${notes ? 'Notes and instructions (has some)' : 'Add notes and instructions'}" aria-label="Notes and instructions" aria-expanded="${notesOpen.has(id)}">${NOTE_ICON}</button>`;
-  const notesBox = (id, notes) => notesOpen.has(id)
-    ? `<textarea class="pe-notes" data-id="${id}" rows="2" placeholder="Notes and instructions for this activity…" aria-label="Notes and instructions">${esc(notes || '')}</textarea>` : '';
+  const notesButton = (id, x) => {
+    const subs = (x.subtasks || []).length, has = x.notes || subs;
+    return `<button type="button" class="pe-notes-btn${has ? ' has' : ''}${notesOpen.has(id) ? ' open' : ''}" data-id="${id}"
+      title="${has ? 'Notes and subtasks' : 'Add notes and subtasks'}" aria-label="Notes and subtasks" aria-expanded="${notesOpen.has(id)}">${NOTE_ICON}${subs ? `<small>${subs}</small>` : ''}</button>`;
+  };
+  const notesBox = (id, x) => notesOpen.has(id) ? `<div class="pe-details">
+      <textarea class="pe-notes" data-id="${id}" rows="2" placeholder="Notes and instructions for this activity…" aria-label="Notes and instructions">${esc(x.notes || '')}</textarea>
+      <ol class="pe-subs">${(x.subtasks || []).map((sub, n) => `<li><span class="pe-sub-no">${n + 1}</span>
+        <input class="pe-sub" data-n="${n}" value="${esc(sub.name)}" aria-label="Subtask ${n + 1}" autocomplete="off">
+        <button type="button" class="pe-sub-del" data-n="${n}" title="Remove subtask" aria-label="Remove subtask">✕</button></li>`).join('')}</ol>
+      <form class="pe-sub-add" data-id="${id}"><input autocomplete="off" placeholder="Add a subtask and press Enter" aria-label="New subtask"></form>
+    </div>` : '';
   const unitSelect = (cls, unit, n, label) => `<select class="${cls}" aria-label="${label}">${UNITS.map(u => `<option value="${u}"${u === unit ? ' selected' : ''}>${unitName(u, n)}</option>`).join('')}</select>`;
   const duration = (cls, len, unit) => `<span class="pe-dur" title="How long it lasts">⏱ Lasts <input type="number" class="${cls}" min="1" max="999" value="${Math.max(1, len)}" aria-label="Lasts">${unitSelect(cls + '-unit', unit, Math.max(1, len), 'Lasts: days, weeks or months')}</span>`;
 
@@ -420,9 +605,9 @@
             <span class="pe-when"><input type="number" class="pe-n" min="0" max="999" value="${it.n}" aria-label="How far from the key date">${unitSelect('pe-unit', it.unit, it.n, 'Days, weeks or months')}<b class="pe-side">${it.side === 'before' ? 'before' : 'after'}</b></span>
             <span class="pe-durcell">${msButton('start', it.milestone)}${duration('pe-len', it.len, it.lenUnit)}</span>
             ${msButton('end', it.milestone)}
-            ${notesButton(it.id, it.notes)}
+            ${notesButton(it.id, it)}
             <button type="button" class="pe-del" title="Remove this activity" aria-label="Remove">✕</button>
-            ${notesBox(it.id, it.notes)}
+            ${notesBox(it.id, it)}
           </div>`;
         };
         return `<div class="pe-sec" data-s="${si}" style="--kc:${kc}">
@@ -434,9 +619,9 @@
             <span class="pe-when"><span class="pe-keytag">◆ Key date</span></span>
             <span class="pe-durcell">${msButton('start', keyMs(s), ' pe-kms')}${duration('pe-klen', s.key.len, s.key.lenUnit)}</span>
             ${msButton('end', keyMs(s), ' pe-kms')}
-            ${notesButton(s.key.id, s.key.notes)}
+            ${notesButton(s.key.id, s.key)}
             <button type="button" class="pe-kdel" title="${many ? 'Remove this key date and its activities' : 'An activity group needs a key date'}" aria-label="Remove key date" ${many ? '' : 'disabled'}>✕</button>
-            ${notesBox(s.key.id, s.key.notes)}
+            ${notesBox(s.key.id, s.key)}
           </div>
           ${after.map(row).join('')}
           <button type="button" class="sheet-adder pe-add" data-s="${si}">+ Add activity</button>
@@ -464,12 +649,14 @@
 
   const secOf = el => draft.sections[+el.closest('[data-s]').dataset.s];
   const itemOf = el => { const r = el.closest('.pe-row'); return draft.sections[+r.dataset.s].items[+r.dataset.i]; };
+  const ownerOf = el => el.closest('.pe-keyrow') ? secOf(el).key : itemOf(el); // (a key date or an activity)
   body.addEventListener('input', e => {
     const el = e.target;
     if (el.matches('.pe-title')) draft.name = el.value;
     else if (el.matches('.pe-name')) itemOf(el).name = el.value;
     else if (el.matches('.pe-kname')) secOf(el).key.name = el.value;
-    else if (el.matches('.pe-notes')) (el.closest('.pe-keyrow') ? secOf(el).key : itemOf(el)).notes = el.value;
+    else if (el.matches('.pe-notes')) ownerOf(el).notes = el.value;
+    else if (el.matches('.pe-sub')) ownerOf(el).subtasks[+el.dataset.n].name = el.value;
   });
   body.addEventListener('change', e => {
     const el = e.target, num = (v, min) => Math.max(min, Math.round(+v || min));
@@ -482,6 +669,13 @@
   });
   body.addEventListener('submit', e => {
     e.preventDefault();
+    const sf = e.target.closest('.pe-sub-add');
+    if (sf) { // a new subtask: ready for the next one
+      const name = sf.querySelector('input').value.trim();
+      if (!name) return;
+      (ownerOf(sf).subtasks ||= []).push({ id: uid(), name });
+      return drawEditor(`.pe-sub-add[data-id="${sf.dataset.id}"] input`);
+    }
     const f = e.target.closest('.pe-link-form');
     if (!f) return;
     const url = normalizeUrl(f.querySelector('input').value);
@@ -501,6 +695,8 @@
       if (placeOpen) body.querySelector('.pe-place-wrap').scrollIntoView({ block: 'nearest' });
       return;
     }
+    const sd = t.closest('.pe-sub-del');
+    if (sd) { ownerOf(sd).subtasks.splice(+sd.dataset.n, 1); return drawEditor(); }
     const nb = t.closest('.pe-notes-btn');
     if (nb) {
       const id = nb.dataset.id;
@@ -541,7 +737,7 @@
     }
     if (t.closest('.pe-save')) {
       const id = draft.id;
-      if (await saveDraft()) { dlg.close(); if (id) offerUpdates(id); }
+      if (await saveDraft()) { dlg.close(); if (id) offerEverywhere(id); }
       return;
     }
     if (t.closest('.pe-place-btn')) {
@@ -670,6 +866,7 @@
     draft.sections.forEach((s, i) => {
       s.key.name = s.key.name.trim() || `Key date ${i + 1}`;
       s.items.forEach(it => { it.name = it.name.trim() || 'Activity'; });
+      for (const x of [s.key, ...s.items]) x.subtasks = (x.subtasks || []).map(sub => ({ ...sub, name: sub.name.trim() })).filter(sub => sub.name);
     });
     delete draft.items; // (the old way of storing them)
     const all = list();

@@ -1800,9 +1800,14 @@
 
   /* An activity group has changed: bring the changes into this project? */
   .pu-list { margin: 0 0 16px; padding: 0; list-style: none; font-size: 13.5px; }
+  .pu-list { max-height: 50vh; overflow-y: auto; }
   .pu-list li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
-  .pu-list li b { width: 14px; text-align: center; }
-  .pu-list small { margin-left: auto; color: var(--muted); }
+  .pu-list li b { flex: none; width: 14px; text-align: center; }
+  .pu-list li span { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .pu-list small { margin-left: auto; color: var(--muted); text-align: right; }
+  .pu-edit b { color: var(--accent); }
+  .pu-kept { color: var(--muted); }
+  .pu-kept span { font-weight: 600; }
   .pu-add b { color: #3f9f7a; }
   .pu-del { color: var(--muted); }
   .pu-del b { color: var(--today); }
@@ -1827,3 +1832,38 @@
     .pe-row { grid-template-columns: 22px minmax(0, 1fr) 26px 26px 26px; }
     .pe-row .pe-notes-btn { grid-row: 1; }
   }
+
+  /* An activity's notes and subtasks, under its row */
+  .pe-details { grid-column: 2 / -1; display: flex; flex-direction: column; gap: 6px; margin: 4px 0 4px; }
+  .pe-details .pe-notes { margin: 0; }
+  .pe-subs { margin: 0; padding: 0; list-style: none; }
+  .pe-subs li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+  .pe-sub-no { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--weekend); color: var(--muted);
+               font-size: 11px; font-weight: 800; line-height: 20px; text-align: center; }
+  .pe-sub { flex: 1; min-width: 0; height: 28px; padding: 0 6px; border-color: transparent; background: transparent; font-size: 13px; }
+  .pe-sub:hover { border-color: var(--line); }
+  .pe-sub:focus { border-color: var(--accent); background: var(--panel); }
+  .pe-sub-del { flex: none; width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px; background: none; color: var(--muted); font-size: 11px; }
+  .pe-sub-del:hover { background: var(--weekend); color: var(--text); }
+  .pe-sub-add input { width: 100%; box-sizing: border-box; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px;
+                     background: var(--panel); font-size: 13px; }
+  .pe-sub-add input::placeholder { color: var(--muted); }
+  .pe-sub-add input:focus { outline: none; border-color: var(--accent); }
+  .pe-notes-btn { position: relative; }
+  .pe-notes-btn small { position: absolute; top: -3px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 999px;
+                        background: var(--accent); color: var(--on-accent, #fff); font-size: 9.5px; font-weight: 800; line-height: 14px; }
+
+  /* An activity group has changed: your projects that use it, each with a tick box and
+     its changes (fold it open to see them) */
+  dialog.preset-update { max-width: 560px; }
+  .pu-projects { max-height: 55vh; overflow-y: auto; overflow-x: hidden; margin: 0 0 16px; border-top: 1px solid var(--line); }
+  .pu-project { border-bottom: 1px solid var(--line); }
+  .pu-project summary { display: flex; align-items: center; gap: 10px; padding: 10px 2px; cursor: pointer; list-style: none; }
+  .pu-project summary::-webkit-details-marker { display: none; }
+  .pu-project summary::after { content: '▸'; color: var(--muted); font-size: 11px; transition: transform .15s; }
+  .pu-project[open] summary::after { transform: rotate(90deg); }
+  .pu-project summary input { flex: none; width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
+  .pu-project summary small { color: var(--muted); }
+  .pu-count { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .pu-project .pu-list { max-height: none; margin: 0 0 10px 27px; }
+  .pu-group { padding: 8px 0 2px !important; border-bottom: none !important; font-size: 12px; font-weight: 800; color: var(--muted); }
