@@ -1173,11 +1173,13 @@ function sheetLinks(links, owner) {
 }
 
 // The task sheet. At the top, a strip in the group's colour; then the done circle
-// (or the progress ring, with subtasks), the name, ⋯ (Delete task) and ✕. Under the
-// name, its details as chips: the group, the dates, the milestone, its links and
-// "Add link". A chip opens a small picker (the dates, a new link) right under it.
+// (or the progress ring, with subtasks), the name with its group in small text under
+// it (just text), ⋯ (Delete task) and ✕. Under that, its details as chips: the dates (with a ◆
+// on each side: a milestone at the start or at the end), its links and "Add link".
+// A chip opens a small picker (the dates, a new link) right under it.
 // Then the subtasks, and the comments in their own grey area at the bottom.
 let sheetPop = null; // the open picker: 'dates', 'link' or 'more' (⋯)
+let sheetDurUnit = 'days'; // (the dates picker's duration: in days or weeks)
 const ICON_CAL = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 const ICON_DIAMOND = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 const ICON_MORE = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>';
@@ -1202,30 +1204,39 @@ function sheetTop(t, subs, pct, edit) {
     : subTick(t.done, true);
   const links = (t.links || []).map((l, i) => `<span class="sheet-chip sheet-link-chip">${CLIP_ICON}<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(l.url))}</a>${edit
     ? `<button type="button" class="sheet-link-del" data-owner="task" data-index="${i}" title="Remove link" aria-label="Remove link">✕</button>` : ''}</span>`).join('');
-  const ms = v => `<option value="${v}"${(t.milestone || '') === v ? ' selected' : ''}>${{ '': 'No milestone', start: 'At start', end: 'At end' }[v]}</option>`;
+  // A ◆ on each side of the dates: a milestone at the start or at the end (one at a time)
+  const msBtn = where => {
+    const on = t.milestone === where;
+    return `<button type="button" class="sheet-ms-btn${on ? ' on' : ''}" data-ms="${where}" aria-pressed="${on}"
+      title="${on ? `A milestone at the ${where}. Click to remove it` : `Put a milestone at the ${where}`}" aria-label="Milestone at the ${where}">${ICON_DIAMOND}</button>`;
+  };
+  const durN = sheetDurUnit === 'weeks' && len % 7 === 0 ? len / 7 : len;
+  const durUnit = durN === len ? 'days' : 'weeks';
   return `
     <div class="sheet-strip" aria-hidden="true"></div>
     <div class="sheet-head">
       ${circle}
-      ${edit ? `<input class="sheet-name" value="${esc(t.name)}" aria-label="Task name" autocomplete="off">` : `<h2 class="sheet-title">${esc(t.name)}</h2>`}
+      <div class="sheet-titles">
+        ${edit ? `<input class="sheet-name" value="${esc(t.name)}" aria-label="Task name" autocomplete="off">` : `<h2 class="sheet-title">${esc(t.name)}</h2>`}
+        <span class="sheet-group-line${t.group ? '' : ' empty'}"><span class="sheet-dot"></span>${t.group ? esc(t.group) : 'No group'}</span>
+      </div>
       ${edit ? `<button type="button" class="sheet-icon sheet-more" data-pop="more" aria-expanded="${sheetPop === 'more'}" title="More" aria-label="More">${ICON_MORE}</button>` : ''}
       <button type="button" class="sheet-icon sheet-close" title="Close" aria-label="Close">✕</button>
       ${sheetPop === 'more' ? `<div class="sheet-pop sheet-more-pop" role="menu"><button type="button" class="sheet-delete" role="menuitem">Delete task</button></div>` : ''}
     </div>
     <div class="sheet-chips">
       ${edit
-        ? `<label class="sheet-chip sheet-group-chip" title="Group"><span class="sheet-dot"></span><input class="sheet-group" list="groupList" value="${esc(t.group || '')}" placeholder="Group" autocomplete="off" aria-label="Group"></label>
-           <button type="button" class="sheet-chip" data-pop="dates" aria-expanded="${sheetPop === 'dates'}" title="Change the dates">${ICON_CAL}${sheetDateText(t)}${days}</button>
-           <label class="sheet-chip sheet-ms-chip${t.milestone ? '' : ' empty'}" title="Milestone">${ICON_DIAMOND}${msText || 'Milestone'}<select class="sheet-ms" aria-label="Milestone">${ms('')}${ms('start')}${ms('end')}</select></label>
+        ? `<span class="sheet-dates">${msBtn('start')}<button type="button" class="sheet-chip" data-pop="dates" aria-expanded="${sheetPop === 'dates'}" title="Change the dates">${ICON_CAL}${sheetDateText(t)}${days}</button>${msBtn('end')}</span>
            ${links}
            <button type="button" class="sheet-chip dashed" data-pop="link" aria-expanded="${sheetPop === 'link'}">${CLIP_ICON}Add link</button>`
-        : `<span class="sheet-chip${t.group ? '' : ' empty'}"><span class="sheet-dot"></span>${t.group ? esc(t.group) : 'No group'}</span>
-           <span class="sheet-chip">${ICON_CAL}${sheetDateText(t)}${days}</span>
+        : `<span class="sheet-chip">${ICON_CAL}${sheetDateText(t)}${days}</span>
            ${t.milestone ? `<span class="sheet-chip">${ICON_DIAMOND}${msText}</span>` : ''}
            ${links}`}
       ${sheetPop === 'dates' ? `<div class="sheet-pop" data-for="dates">
           <label>Start<input type="date" class="sheet-start" value="${t.start}"></label>
           <label>End<input type="date" class="sheet-end" value="${t.end}"></label>
+          <label>Or a duration<span class="sheet-dur-row"><input type="number" class="sheet-dur" min="1" max="999" value="${durN}" aria-label="Duration">
+            <select class="sheet-dur-unit" aria-label="Days or weeks">${['days', 'weeks'].map(u => `<option value="${u}"${u === durUnit ? ' selected' : ''}>${durN === 1 ? u.slice(0, -1) : u}</option>`).join('')}</select></span></label>
           <div class="error sheet-date-error"></div>
         </div>` : ''}
       ${sheetPop === 'link' ? `<div class="sheet-pop sheet-link-pop" data-for="link">
@@ -1259,7 +1270,6 @@ function drawSheet() {
       ? `<form class="sheet-add-sub"><input autocomplete="off" placeholder="New subtask"><button class="primary">Add</button></form>`
       : `<button type="button" class="sheet-adder" data-add="sub">${ICON_PLUS}Add subtask</button>`}
     <div class="sheet-thread-slot"></div>`;
-  fitGroupInput(sheetBody.querySelector('.sheet-group'));
   placeSheetPop();
   window.collab?.placeThread(sheetBody.querySelector('.sheet-thread-slot')); // the comments (kept across redraws)
 }
@@ -1314,6 +1324,8 @@ sheetBody.addEventListener('click', async e => {
   }
   if (sheetPop && !e.target.closest('.sheet-pop')) { sheetPop = null; drawSheet(); } // a click elsewhere closes it
   if (e.target.closest('.sheet-done-btn') && !readOnly) { t.done = !t.done; return sheetCommit(); } // (its done circle)
+  const msBtn = e.target.closest('.sheet-ms-btn');
+  if (msBtn && !readOnly) { t.milestone = t.milestone === msBtn.dataset.ms ? '' : msBtn.dataset.ms; return sheetCommit(); }
   const adder = e.target.closest('.sheet-adder');
   if (adder) { // "+ Add link" / "+ Add subtask": show the field, ready to type
     sheetAdding = adder.dataset.add;
@@ -1337,12 +1349,17 @@ sheetBody.addEventListener('change', e => {
   const t = sheetTask(), el = e.target, li = el.closest('.sheet-subs li');
   if (el.matches('.sheet-name')) { t.name = el.value.trim() || t.name; return sheetCommit(); }
   if (el.matches('.sheet-done')) { t.done = el.checked; return sheetCommit(); }
-  if (el.matches('.sheet-group')) { t.group = el.value.trim(); return sheetCommit(); }
-  if (el.matches('.sheet-ms')) { t.milestone = el.value; return sheetCommit(); }
   if (el.matches('.sheet-sub-done')) { t.subtasks.find(s => s.id === li.dataset.sub).done = el.checked; return sheetCommit(); }
   if (el.matches('.sheet-sub-name')) { const s = t.subtasks.find(s => s.id === li.dataset.sub); s.name = el.value.trim() || s.name; return sheetCommit(); }
-  if (el.matches('.sheet-start, .sheet-end')) {
-    const start = sheetBody.querySelector('.sheet-start').value, end = sheetBody.querySelector('.sheet-end').value;
+  if (el.matches('.sheet-start, .sheet-end, .sheet-dur, .sheet-dur-unit')) {
+    // (a duration sets the end date: counted from the start, the start day included)
+    if (el.matches('.sheet-dur-unit')) sheetDurUnit = el.value;
+    const start = sheetBody.querySelector('.sheet-start').value;
+    let end = sheetBody.querySelector('.sheet-end').value;
+    if (el.matches('.sheet-dur, .sheet-dur-unit') && start) {
+      const n = Math.max(1, Math.round(+sheetBody.querySelector('.sheet-dur').value || 1));
+      end = fmt(new Date(+parse(start) + (n * (sheetDurUnit === 'weeks' ? 7 : 1) - 1) * DAY));
+    }
     if (!start || !end || end < start) { sheetBody.querySelector('.sheet-date-error').textContent = 'The end date must be on or after the start date.'; return; }
     const before = { ...t };
     Object.assign(t, { start, end });
@@ -1372,14 +1389,6 @@ sheetBody.addEventListener('submit', e => {
 });
 // Esc closes an open picker first, then the sheet
 sheet.addEventListener('cancel', e => { if (sheetPop) { e.preventDefault(); sheetPop = null; drawSheet(); } });
-// The group chip grows with its name
-sheetBody.addEventListener('input', e => { if (e.target.matches('.sheet-group')) fitGroupInput(e.target); });
-function fitGroupInput(el) {
-  const ctx = (fitGroupInput.ctx ||= document.createElement('canvas').getContext('2d'));
-  const cs = getComputedStyle(el);
-  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-  el.style.width = `${Math.ceil(ctx.measureText(el.value || el.placeholder).width) + 2}px`;
-}
 // Tap outside the sheet closes it (but not the second click of a double-click that opened it)
 sheet.addEventListener('click', e => { if (e.target === sheet && Date.now() - sheetOpenedAt > 500) sheet.close(); });
 

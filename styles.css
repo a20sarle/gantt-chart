@@ -1674,3 +1674,126 @@
   .side-loose.after { padding-top: 6px; border-top: 1px solid var(--line); }
   .side-loose .side-proj { padding-left: 10px; }
   #colorReset.on { color: var(--text); text-decoration: none; font-weight: 700; cursor: default; }
+
+  /* ---- The activity group editor (presets.js): key dates as sections, rows you drag
+     above (before) or below (after) a key date, durations that say "Lasts", the group's
+     links at the top ---- */
+  dialog.preset-dialog { width: min(760px, calc(100vw - 24px)); max-width: 760px; }
+  #presetBody { border-top: none; }
+  .pe-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12.5px; }
+  .pe-links-label { display: inline-flex; align-items: center; gap: 5px; margin-right: 2px; font-weight: 800; color: var(--muted); }
+  .pe-link { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 4px 0 10px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; }
+  .pe-link a { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--accent); font-weight: 600; }
+  .pe-link-del { width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); font-size: 11px; }
+  .pe-link-del:hover { background: var(--weekend); color: var(--text); }
+  .pe-link-add { height: 26px; padding: 0 10px; border: 1px dashed var(--line); border-radius: 999px; background: none; color: var(--muted); font-size: 12.5px; font-weight: 700; }
+  .pe-link-add:hover { color: var(--text); border-color: var(--muted); }
+  .pe-link-form { display: inline-flex; gap: 6px; flex: 1; min-width: 240px; }
+  .pe-link-form input { flex: 1; min-width: 0; height: 28px; padding: 0 8px; font-size: 13px; }
+  .pe-link-form button { height: 28px; padding: 0 12px; }
+  .pe-link-error:empty { display: none; }
+  .pe-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 200px 190px 26px 26px; align-items: center; gap: 0 8px; padding: 5px 0;
+            border-bottom: 1px solid var(--line); font-size: 13px; background: var(--panel); }
+  .pe-colhead { padding: 6px 0 4px; font-size: 11px; font-weight: 800; color: var(--muted); }
+  .pe-sec { margin: 0 0 6px; }
+  .pe-sec-head { margin: 12px 0 2px; font-size: 12.5px; font-weight: 800; color: color-mix(in srgb, var(--kc) 60%, var(--text)); }
+  .pe-grip { display: flex; justify-content: center; color: color-mix(in srgb, var(--muted) 60%, var(--panel)); font-size: 14px; letter-spacing: -2px; cursor: grab; user-select: none; touch-action: none; }
+  .pe-grip:hover { color: var(--text); }
+  .pe-grip-key { color: var(--kc); letter-spacing: 0; cursor: default; }
+  .pe-row .pe-name, .pe-row .pe-kname { min-width: 0; padding: 4px 6px; border-color: transparent; background: transparent; font-weight: 700; font-size: 13.5px; }
+  .pe-row .pe-name:hover, .pe-row .pe-kname:hover { border-color: var(--line); }
+  .pe-row .pe-name:focus, .pe-row .pe-kname:focus { border-color: var(--accent); background: var(--panel); }
+  .pe-when, .pe-dur { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .pe-row input[type=number] { width: 52px; height: 28px; padding: 0 4px; font-size: 13px; text-align: right; }
+  .pe-row select { height: 28px; padding: 0 4px; font-size: 13px; }
+  .pe-side { min-width: 42px; font-weight: 800; color: var(--muted); }
+  .pe-dur { padding: 2px 3px 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--muted) 12%, var(--panel)); color: var(--muted); font-weight: 700; font-size: 12.5px; }
+  .pe-dur input[type=number], .pe-dur select { height: 24px; border-color: transparent; background: var(--panel); }
+  .pe-keyrow { background: color-mix(in srgb, var(--kc) 11%, var(--panel)); }
+  .pe-keytag { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 800;
+               background: color-mix(in srgb, var(--kc) 24%, var(--panel)); color: color-mix(in srgb, var(--kc) 60%, var(--text)); }
+  .pe-keyrow .pe-ms.on { color: var(--kc); }
+  .pe-kdel { width: 26px; height: 26px; padding: 0; border: none; border-radius: 6px; background: none; color: var(--muted); }
+  .pe-kdel:hover:not(:disabled) { background: var(--weekend); color: var(--text); }
+  .pe-kdel:disabled { opacity: .3; }
+  .pe-row.dragging { opacity: .5; box-shadow: 0 6px 18px rgba(31, 29, 58, .18); position: relative; z-index: 2; }
+  html.pe-dragging, html.pe-dragging * { cursor: grabbing !important; user-select: none; }
+  .pe-sec .pe-add { padding-left: 30px; }
+  .pe-add-key { display: block; margin: 12px 0 0; }
+  .pe-head + .pe-links, .pe-note + .pe-links { margin-bottom: 4px; }
+  .pe-place { display: block; }
+  .pe-place-label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+  .pe-place-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .pe-place-key { flex-direction: row; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
+  .pa-key { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap;
+            background: color-mix(in srgb, var(--kc) 24%, var(--panel)); color: color-mix(in srgb, var(--kc) 60%, var(--text)); }
+  dialog.preset-ask { max-width: 440px; }
+  dialog.preset-ask h2 { font-size: 16px; }
+  .pa-row { display: flex; flex-direction: row; align-items: center; gap: 10px; margin: 0 0 10px; color: var(--text); font-size: 13px; }
+  .pa-fixed small { color: var(--muted); }
+  @media (max-width: 640px) {
+    .pe-colhead { display: none; }
+    .pe-row { grid-template-columns: 22px minmax(0, 1fr) 26px 26px; row-gap: 4px; }
+    .pe-row .pe-when, .pe-row .pe-dur { grid-column: 2 / -1; justify-self: start; }
+    .pe-row .pe-ms, .pe-row .pe-del, .pe-row .pe-kdel { grid-row: 1; }
+  }
+
+  /* The activity group editor: its dot opens the colour picker, its links under the name,
+     adding to the project on the same line as Cancel and Save */
+  .pe-head .pe-dot { width: 16px; height: 16px; margin: 0 2px; padding: 0; border: none; cursor: pointer;
+                     box-shadow: 0 0 0 3px var(--panel), 0 0 0 4px var(--line); }
+  .pe-head .pe-dot:hover, .pe-head .pe-dot[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px var(--accent); }
+  .pe-head .pe-delete { color: var(--muted); border: none; }
+  .pe-head .pe-delete:hover { color: var(--today); }
+  .pe-color-pop { position: absolute; z-index: 5; display: flex; flex-direction: column; }
+  .pe-color-pop[hidden] { display: none; }
+  #presetBody > .pe-links { margin: 10px 0 10px 30px; }
+  /* Adding to the project: its own section, folded under Cancel / Save */
+  #presetBody > .pe-actions { margin-top: 14px; }
+  .pe-place-wrap { margin-top: 14px; border-top: 1px solid var(--line); }
+  .pe-place-wrap[hidden] { display: none; }
+  .pe-place-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 0 4px; border: none; background: none;
+                     font-size: 13.5px; font-weight: 800; color: var(--text); text-align: left; }
+  .pe-place-toggle:hover { color: var(--accent); }
+  .pe-chev { display: inline-block; color: var(--muted); transition: transform .15s; }
+  .pe-place-wrap.open .pe-chev { transform: rotate(90deg); }
+  .pe-place-wrap .pe-place { margin: 6px 0 0; }
+  .pe-place-row { align-items: flex-end; }
+  .pe-place .pe-place-key { flex: none; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+  .pe-place-key input[type=date] { height: 32px; }
+  .pe-place-btn { height: 32px; }
+
+  /* A milestone at the start (◆ before "Lasts") or at the end (◆ after it) */
+  .pe-row { grid-template-columns: 22px minmax(0, 1fr) 200px 222px 26px 26px; }
+  .pe-durcell { display: inline-flex; align-items: center; gap: 6px; }
+  .pe-ms-start { flex: none; }
+  .pe-keyrow .pe-ms.on { color: var(--kc); }
+  @media (max-width: 640px) {
+    .pe-row { grid-template-columns: 22px minmax(0, 1fr) 26px 26px; }
+    .pe-row .pe-durcell { grid-column: 2 / -1; justify-self: start; }
+  }
+
+  /* The sidebar: label groups without a tint (the label's name in its colour, its projects
+     under it), and a line between the projects and the activity groups */
+  .side-group { margin: 0 0 10px; }
+  .side-group:not(.side-loose) { padding: 0; border-radius: 0; background: none; }
+  .side-label { padding: 6px 10px 2px; }
+  .side-group:not(.side-loose) .side-proj { padding-left: 26px; }
+  .side-loose.after { padding-top: 0; border-top: none; }
+  .side-presets-block { margin-top: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
+
+  /* The task sheet: the group in small text under the name, a ◆ on each side of the
+     dates (a milestone at the start or the end), a duration in the dates picker */
+  .sheet-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .sheet-group-line { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; max-width: 100%; margin: 0 0 0 0; padding: 0;
+                      font-size: 12.5px; font-weight: 700; color: color-mix(in srgb, var(--bar) 60%, var(--text)); }
+  .sheet-group-line.empty { color: var(--muted); font-weight: 600; }
+  .sheet-dates { display: inline-flex; align-items: center; gap: 2px; }
+  .sheet-ms-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+                  border: none; border-radius: 50%; background: none; color: color-mix(in srgb, var(--muted) 70%, var(--panel)); }
+  .sheet-ms-btn:hover { background: var(--weekend); color: var(--text); }
+  .sheet-ms-btn.on { color: var(--bar); }
+  .sheet-ms-btn.on svg path { fill: currentColor; }
+  .sheet-dur-row { display: inline-flex; gap: 6px; }
+  .sheet-dur { width: 60px; font-size: 14px; text-align: right; }
+  .sheet-dur-unit { font-size: 14px; }

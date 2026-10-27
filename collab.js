@@ -632,7 +632,7 @@
     const groups = sortedLabels().map(l => ({ l, ps: comboList.filter(p => labelOf(p)?.id === l.id) })).filter(g => g.ps.length);
     const loose = comboList.filter(p => !labelOf(p));
     box.innerHTML = groups.map(({ l, ps }) => `<div class="side-group" style="--label:${l.color}">
-        <div class="side-label"><i aria-hidden="true"></i>${esc(l.name)}</div>${ps.map(item).join('')}</div>`).join('')
+        <div class="side-label">${esc(l.name)}</div>${ps.map(item).join('')}</div>`).join('')
       + (loose.length ? `<div class="side-group side-loose${groups.length ? ' after' : ''}">${loose.map(item).join('')}</div>` : '')
       || '<p class="side-empty">Loading…</p>';
   }
