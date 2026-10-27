@@ -1806,3 +1806,24 @@
   .pu-add b { color: #3f9f7a; }
   .pu-del { color: var(--muted); }
   .pu-del b { color: var(--today); }
+
+  /* Notes and instructions: on a task (its sheet, under the chips) and on an activity in an
+     activity group (📝 shows them under its row) */
+  .sheet-notes { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 8px 10px; min-height: 44px;
+                 border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text);
+                 font: inherit; font-size: 13.5px; line-height: 1.45; resize: vertical; field-sizing: content; max-height: 40vh; }
+  textarea.sheet-notes:hover { border-color: color-mix(in srgb, var(--text) 20%, var(--line)); }
+  textarea.sheet-notes:focus { outline: none; border-color: var(--accent); }
+  .sheet-notes-view { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border-color: transparent; }
+  .pe-row { grid-template-columns: 22px minmax(0, 1fr) 200px 222px 26px 26px 26px; }
+  .pe-notes-btn { width: 26px; height: 26px; padding: 0; border: none; border-radius: 6px; background: none;
+                  color: color-mix(in srgb, var(--muted) 60%, var(--panel)); display: inline-flex; align-items: center; justify-content: center; }
+  .pe-notes-btn:hover, .pe-notes-btn.open { background: var(--weekend); color: var(--text); }
+  .pe-notes-btn.has { color: var(--accent); }
+  .pe-notes { grid-column: 2 / -1; margin: 4px 0 2px; padding: 6px 8px; min-height: 40px; border: 1px solid var(--line); border-radius: 6px;
+              background: var(--panel); font: inherit; font-size: 13px; line-height: 1.4; resize: vertical; field-sizing: content; }
+  .pe-notes:focus { outline: none; border-color: var(--accent); }
+  @media (max-width: 640px) {
+    .pe-row { grid-template-columns: 22px minmax(0, 1fr) 26px 26px 26px; }
+    .pe-row .pe-notes-btn { grid-row: 1; }
+  }

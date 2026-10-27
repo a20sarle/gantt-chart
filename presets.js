@@ -114,6 +114,7 @@
       id: uid(), name: s.key.name, group, start: dayString(keyDay), end: dayString(endOf(keyDay, s.key.len, s.key.lenUnit)),
       milestone: keyMs(s), done: false, after: [], links: (p.links || []).map(l => ({ url: l.url })),
       subtasks: (s.key.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
+      notes: s.key.notes || '',
       from: { ...from, i: s.key.id },
     };
   }
@@ -123,6 +124,7 @@
       id: uid(), name: it.name, group, start: dayString(start), end: dayString(endOf(start, it.len, it.lenUnit)),
       milestone: it.milestone || '', done: false, after: [], links: [],
       subtasks: (it.subtasks || []).map((name, i) => ({ id: uid(), no: i + 1, name, done: false })),
+      notes: it.notes || '',
       from: { ...from, i: it.id },
     };
   }
@@ -344,11 +346,11 @@
       id: null, name: g || 'New activity group', color: groupColors[g] ?? 0, links: [], gaps: {},
       sections: [{
         id: uid(),
-        key: { id: key.id, name: key.name, len: daysBetween(parse(key.start), parse(key.end)) + 1, lenUnit: 'days', milestone: key.milestone || '', subtasks: (key.subtasks || []).map(s => s.name) },
+        key: { id: key.id, name: key.name, len: daysBetween(parse(key.start), parse(key.end)) + 1, lenUnit: 'days', milestone: key.milestone || '', subtasks: (key.subtasks || []).map(s => s.name), notes: key.notes || '' },
         items: all.filter(t => t !== key).map(t => {
           const off = dayNumber(parse(t.start)) - keyDay;
           return { id: t.id, name: t.name, side: off < 0 ? 'before' : 'after', n: Math.abs(off), unit: 'days',
-            len: daysBetween(parse(t.start), parse(t.end)) + 1, lenUnit: 'days', milestone: t.milestone || '', subtasks: (t.subtasks || []).map(s => s.name) };
+            len: daysBetween(parse(t.start), parse(t.end)) + 1, lenUnit: 'days', milestone: t.milestone || '', subtasks: (t.subtasks || []).map(s => s.name), notes: t.notes || '' };
         }),
       }],
     }, { fromGroup: true });
@@ -356,6 +358,7 @@
 
   // ---- The editor ----
   let draft = null, draftIsNew = false, addingLink = false, placeOpen = false;
+  const notesOpen = new Set(); // (the rows whose notes are showing: their ids)
   const newSection = name => ({ id: uid(), key: { id: uid(), name, len: 1, lenUnit: 'days', subtasks: [] }, items: [] });
   function openEditor(p, { fromGroup = false } = {}) {
     draftIsNew = !p || !p.id;
@@ -363,6 +366,7 @@
       id: null, name: '', color: Math.floor(Math.random() * PALETTE.length), links: [], gaps: {}, sections: [newSection('Event')],
     };
     addingLink = false; placeOpen = false;
+    notesOpen.clear();
     dlg.dataset.fromGroup = fromGroup ? '1' : '';
     drawEditor();
     dlg.showModal();
@@ -376,6 +380,12 @@
     const on = ms === where, at = where === 'start' ? 'start' : 'end';
     return `<button type="button" class="pe-ms pe-ms-${at}${cls}${on ? ' on' : ''}" data-ms="${where}" title="${on ? `A milestone (◆) at the ${at}. Click to remove it` : `Put a milestone (◆) at the ${at}`}" aria-pressed="${on}">◆</button>`;
   };
+  // Notes and instructions for an activity: 📝 shows them under its row (they go onto the task)
+  const NOTE_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 3h9l4 4v14H6z M15 3v4h4 M9 12h7 M9 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const notesButton = (id, notes) => `<button type="button" class="pe-notes-btn${notes ? ' has' : ''}${notesOpen.has(id) ? ' open' : ''}" data-id="${id}"
+    title="${notes ? 'Notes and instructions (has some)' : 'Add notes and instructions'}" aria-label="Notes and instructions" aria-expanded="${notesOpen.has(id)}">${NOTE_ICON}</button>`;
+  const notesBox = (id, notes) => notesOpen.has(id)
+    ? `<textarea class="pe-notes" data-id="${id}" rows="2" placeholder="Notes and instructions for this activity…" aria-label="Notes and instructions">${esc(notes || '')}</textarea>` : '';
   const unitSelect = (cls, unit, n, label) => `<select class="${cls}" aria-label="${label}">${UNITS.map(u => `<option value="${u}"${u === unit ? ' selected' : ''}>${unitName(u, n)}</option>`).join('')}</select>`;
   const duration = (cls, len, unit) => `<span class="pe-dur" title="How long it lasts">⏱ Lasts <input type="number" class="${cls}" min="1" max="999" value="${Math.max(1, len)}" aria-label="Lasts">${unitSelect(cls + '-unit', unit, Math.max(1, len), 'Lasts: days, weeks or months')}</span>`;
 
@@ -397,7 +407,7 @@
           : '<button type="button" class="pe-link-add">+ Add link</button>'}
       </div>
       <div class="error pe-link-error"></div>
-      <div class="pe-row pe-colhead" aria-hidden="true"><span></span><span>Activity</span><span>Starts</span><span>Duration</span><span></span><span></span></div>
+      <div class="pe-row pe-colhead" aria-hidden="true"><span></span><span>Activity</span><span>Starts</span><span>Duration</span><span></span><span></span><span></span></div>
       ${draft.sections.map((s, si) => {
         const kc = sectionColor(draft, si);
         const before = s.items.filter(it => it.side === 'before').sort((a, b) => roughDays(a) - roughDays(b));
@@ -410,7 +420,9 @@
             <span class="pe-when"><input type="number" class="pe-n" min="0" max="999" value="${it.n}" aria-label="How far from the key date">${unitSelect('pe-unit', it.unit, it.n, 'Days, weeks or months')}<b class="pe-side">${it.side === 'before' ? 'before' : 'after'}</b></span>
             <span class="pe-durcell">${msButton('start', it.milestone)}${duration('pe-len', it.len, it.lenUnit)}</span>
             ${msButton('end', it.milestone)}
+            ${notesButton(it.id, it.notes)}
             <button type="button" class="pe-del" title="Remove this activity" aria-label="Remove">✕</button>
+            ${notesBox(it.id, it.notes)}
           </div>`;
         };
         return `<div class="pe-sec" data-s="${si}" style="--kc:${kc}">
@@ -422,7 +434,9 @@
             <span class="pe-when"><span class="pe-keytag">◆ Key date</span></span>
             <span class="pe-durcell">${msButton('start', keyMs(s), ' pe-kms')}${duration('pe-klen', s.key.len, s.key.lenUnit)}</span>
             ${msButton('end', keyMs(s), ' pe-kms')}
+            ${notesButton(s.key.id, s.key.notes)}
             <button type="button" class="pe-kdel" title="${many ? 'Remove this key date and its activities' : 'An activity group needs a key date'}" aria-label="Remove key date" ${many ? '' : 'disabled'}>✕</button>
+            ${notesBox(s.key.id, s.key.notes)}
           </div>
           ${after.map(row).join('')}
           <button type="button" class="sheet-adder pe-add" data-s="${si}">+ Add activity</button>
@@ -455,6 +469,7 @@
     if (el.matches('.pe-title')) draft.name = el.value;
     else if (el.matches('.pe-name')) itemOf(el).name = el.value;
     else if (el.matches('.pe-kname')) secOf(el).key.name = el.value;
+    else if (el.matches('.pe-notes')) (el.closest('.pe-keyrow') ? secOf(el).key : itemOf(el)).notes = el.value;
   });
   body.addEventListener('change', e => {
     const el = e.target, num = (v, min) => Math.max(min, Math.round(+v || min));
@@ -484,6 +499,13 @@
       placeOpen = !placeOpen;
       drawEditor('.pe-place-toggle');
       if (placeOpen) body.querySelector('.pe-place-wrap').scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    const nb = t.closest('.pe-notes-btn');
+    if (nb) {
+      const id = nb.dataset.id;
+      notesOpen.has(id) ? notesOpen.delete(id) : notesOpen.add(id);
+      drawEditor(notesOpen.has(id) ? `.pe-notes[data-id="${id}"]` : null);
       return;
     }
     if (t.closest('.pe-link-add')) { addingLink = true; drawEditor('.pe-link-form input'); return; }

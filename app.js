@@ -1243,6 +1243,8 @@ function sheetTop(t, subs, pct, edit) {
           <form class="sheet-add-link" data-owner="task"><input type="text" inputmode="url" autocomplete="off" placeholder="Paste a link (Google Doc, website…)"><button class="primary">Add</button></form><div class="error"></div>
         </div>` : ''}
     </div>
+    ${edit ? `<h3 class="sheet-sec">Notes</h3><textarea class="sheet-notes" rows="2" placeholder="Notes and instructions…" aria-label="Notes and instructions">${esc(t.notes || '')}</textarea>`
+      : t.notes ? `<h3 class="sheet-sec">Notes</h3><div class="sheet-notes sheet-notes-view">${esc(t.notes)}</div>` : ''}
     <h3 class="sheet-sec">Subtasks${subs.length ? `<span class="sheet-muted"> · ${doneSubs} of ${subs.length} · ${pct}%</span>` : ''}</h3>
     ${subs.length ? `<div class="sheet-progress"><span style="width:${pct}%"></span></div>` : ''}`;
 }
@@ -1349,6 +1351,7 @@ sheetBody.addEventListener('change', e => {
   const t = sheetTask(), el = e.target, li = el.closest('.sheet-subs li');
   if (el.matches('.sheet-name')) { t.name = el.value.trim() || t.name; return sheetCommit(); }
   if (el.matches('.sheet-done')) { t.done = el.checked; return sheetCommit(); }
+  if (el.matches('.sheet-notes')) { t.notes = el.value.trim() ? el.value : ''; return sheetCommit(); }
   if (el.matches('.sheet-sub-done')) { t.subtasks.find(s => s.id === li.dataset.sub).done = el.checked; return sheetCommit(); }
   if (el.matches('.sheet-sub-name')) { const s = t.subtasks.find(s => s.id === li.dataset.sub); s.name = el.value.trim() || s.name; return sheetCommit(); }
   if (el.matches('.sheet-start, .sheet-end, .sheet-dur, .sheet-dur-unit')) {
@@ -1516,6 +1519,7 @@ document.getElementById('importFile').onchange = async e => {
       after: Array.isArray(t.after) ? t.after.map(String) : [],
       links: cleanLinks(t.links),
       subtasks: Array.isArray(t.subtasks) ? t.subtasks.map(s => ({ id: s.id || uid(), name: String(s.name), done: !!s.done, links: cleanLinks(s.links) })) : [],
+      ...(typeof t.notes === 'string' && t.notes ? { notes: t.notes } : {}),
       ...(t.from && typeof t.from === 'object' ? { from: t.from } : {}), // (placed from an activity group)
     }));
     save(); render();
